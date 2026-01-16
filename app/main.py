@@ -1,5 +1,11 @@
 """Streamlit application for Mirage simulation decision support."""
 
+import sys
+from pathlib import Path
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import streamlit as st
 import pandas as pd
 
@@ -14,8 +20,29 @@ from src.mirage.models import (
     TitresDecision,
     PeriodState,
 )
-from src.mirage.calculator import calculate_all
+from src.mirage.calculator import calculate_all, calculate_study_costs
 from src.mirage import constants as C
+from src.mirage.parser import parse_mirage_markdown, extract_period_state, get_empty_state
+from src.mirage.utils import serialize_simulation_state, deserialize_simulation_state
+
+def sync_widgets_with_state(state: PeriodState):
+    """Met à jour les widgets de la sidebar avec les valeurs de l'état."""
+    st.session_state.s_a_ct = float(state.stock_a_ct) if state.stock_a_ct is not None else 0.0
+    st.session_state.s_a_gs = float(state.stock_a_gs) if state.stock_a_gs is not None else 0.0
+    st.session_state.s_b_ct = float(state.stock_b_ct) if state.stock_b_ct is not None else 0.0
+    st.session_state.s_b_gs = float(state.stock_b_gs) if state.stock_b_gs is not None else 0.0
+    st.session_state.s_c_ct = float(state.stock_c_ct) if state.stock_c_ct is not None else 0.0
+    st.session_state.s_c_gs = float(state.stock_c_gs) if state.stock_c_gs is not None else 0.0
+    st.session_state.s_mp_n = int(state.stock_mp_n) if state.stock_mp_n is not None else 0
+    st.session_state.s_mp_s = int(state.stock_mp_s) if state.stock_mp_s is not None else 0
+    st.session_state.s_ouvriers = int(state.nb_ouvriers) if state.nb_ouvriers is not None else 0
+    st.session_state.s_m1 = int(state.nb_machines_m1) if state.nb_machines_m1 is not None else 0
+    st.session_state.s_m2 = int(state.nb_machines_m2) if state.nb_machines_m2 is not None else 0
+    st.session_state.s_cash = float(state.cash) if state.cash is not None else 0.0
+    st.session_state.s_dlt = float(state.dette_lt) if state.dette_lt is not None else 0.0
+    st.session_state.s_dct = float(state.dette_ct) if state.dette_ct is not None else 0.0
+    st.session_state.s_ip = float(state.indice_prix) if state.indice_prix is not None else 0.0
+    st.session_state.s_is = float(state.indice_salaire) if state.indice_salaire is not None else 0.0
 
 # Page config
 st.set_page_config(
@@ -28,44 +55,202 @@ st.set_page_config(
 st.title("🏭 Mirage - Simulateur de Décisions")
 st.markdown("---")
 
+# Initialize session state
+if "state" not in st.session_state:
+    st.session_state.state = PeriodState(
+        stock_a_ct=609_212,
+        stock_a_gs=0,
+        stock_b_ct=0,
+        stock_b_gs=355_257,
+        stock_c_ct=0,
+        stock_c_gs=0,
+        stock_mp_n=2_889_090,
+        stock_mp_s=687_500,
+        nb_ouvriers=580,
+        nb_machines_m1=18,
+        nb_machines_m2=0,
+        cash=414.0,
+        dette_lt=5_600.0,
+        dette_ct=0.0,
+        indice_prix=107.12,
+        indice_salaire=103.0,
+    )
+    sync_widgets_with_state(st.session_state.state)
+elif "s_a_ct" not in st.session_state:
+    sync_widgets_with_state(st.session_state.state)
+
 
 # =====================================================
 # SIDEBAR - État initial de la période
 # =====================================================
 with st.sidebar:
-    st.header("📊 État Initial (fin période précédente)")
+    st.header("� Sauvegarde / Chargement")
+    
+    # Save/Load logic
+    col_save, col_load = st.columns(2)
+    
+    with col_save:
+        # Pousser le dictionnaire de session_state actuel vers JSON
+        # On convertit en dict d'abord pour passer à la fonction
+        json_state = serialize_simulation_state(dict(st.session_state))
+        st.download_button(
+            label="💾 Sauvegarder",
+            data=json_state,
+            file_name="mirage_session.json",
+            mime="application/json",
+            help="Télécharger le fichier de sauvegarde de votre session actuelle"
+        )
+        
+    # Charger
+    uploaded_session = st.file_uploader("Charger une session (.json)", type=["json"], label_visibility="collapsed")
+    
+    if uploaded_session is not None:
+        try:
+            content = uploaded_session.read().decode("utf-8")
+            loaded_state = deserialize_simulation_state(content)
+            
+            if loaded_state:
+                # Update session state with loaded values
+                for k, v in loaded_state.items():
+                    st.session_state[k] = v
+                
+                st.success("✅ Session chargée avec succès!")
+                # On rerun pour rafraîchir les widgets avec les nouvelles valeurs
+                if st.button("🔄 Appliquer le chargement", type="primary"):
+                    st.rerun()
+            else:
+                st.warning("Le fichier semble vide ou invalide.")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement: {e}")
 
-    st.subheader("Stocks Produits Finis (unités)")
+    st.markdown("---")
+    st.header("�📊 État Initial")
+
+    # Import options
+    st.subheader("📁 Importer des données")
+
+    # File uploader for markdown
+    uploaded_file = st.file_uploader(
+        "Charger un fichier Markdown",
+        type=["md"],
+        help="Fichier au format 'Simulation Md des données year -X.md'"
+    )
+
+    if uploaded_file is not None:
+        try:
+            content = uploaded_file.read().decode("utf-8")
+            parsed = parse_mirage_markdown(content)
+            new_state = extract_period_state(parsed)
+            st.session_state.state = new_state
+            sync_widgets_with_state(new_state)
+            st.success(f"✅ Fichier '{uploaded_file.name}' importé!")
+        except Exception as e:
+            st.error(f"Erreur lors de l'import: {e}")
+
+    # Load from existing files in workspace
+    workspace_path = Path(__file__).parent.parent
+    md_files = list(workspace_path.glob("Simulation*.md"))
+
+    if md_files:
+        st.markdown("**Ou charger depuis le workspace:**")
+        file_options = ["-- Sélectionner --"] + [f.name for f in md_files]
+        selected_file = st.selectbox("Fichier existant", file_options)
+
+        if selected_file != "-- Sélectionner --":
+            if st.button("📥 Charger ce fichier"):
+                file_path = workspace_path / selected_file
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    parsed = parse_mirage_markdown(content)
+                    new_state = extract_period_state(parsed)
+                    st.session_state.state = new_state
+                    sync_widgets_with_state(new_state)
+                    st.success(f"✅ Données de '{selected_file}' chargées!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erreur: {e}")
+
+    st.markdown("---")
+
+    # Reset button
+    col_reset1, col_reset2 = st.columns(2)
+    with col_reset1:
+        if st.button("🔄 Tout à zéro", use_container_width=True):
+            empty_state = get_empty_state()
+            st.session_state.state = empty_state
+            sync_widgets_with_state(empty_state)
+            st.success("Valeurs remises à zéro!")
+            st.rerun()
+    with col_reset2:
+        if st.button("📊 Valeurs P.-2", use_container_width=True):
+            # Reload year -2 defaults
+            p2_state = PeriodState(
+                stock_a_ct=609_212,
+                stock_a_gs=0,
+                stock_b_ct=0,
+                stock_b_gs=355_257,
+                stock_c_ct=0,
+                stock_c_gs=0,
+                stock_mp_n=2_889_090,
+                stock_mp_s=687_500,
+                nb_ouvriers=580,
+                nb_machines_m1=18,
+                nb_machines_m2=0,
+                cash=414.0,
+                dette_lt=5_600.0,
+                dette_ct=0.0,
+                indice_prix=107.12,
+                indice_salaire=103.0,
+            )
+            st.session_state.state = p2_state
+            sync_widgets_with_state(p2_state)
+            st.success("Valeurs P.-2 chargées!")
+            st.rerun()
+
+    st.markdown("---")
+
+    st.subheader("✏️ Stocks Produits Finis (U)")
     col1, col2 = st.columns(2)
     with col1:
-        stock_a_ct = st.number_input("Stock A-CT", min_value=0, value=609_212, step=1000)
-        stock_b_ct = st.number_input("Stock B-CT", min_value=0, value=0, step=1000)
-        stock_c_ct = st.number_input("Stock C-CT", min_value=0, value=0, step=1000)
+        stock_a_ct = st.number_input("Stock A-CT", min_value=0, step=1000, key="s_a_ct")
+        stock_b_ct = st.number_input("Stock B-CT", min_value=0, step=1000, key="s_b_ct")
+        stock_c_ct = st.number_input("Stock C-CT", min_value=0, step=1000, key="s_c_ct")
     with col2:
-        stock_a_gs = st.number_input("Stock A-GS", min_value=0, value=0, step=1000)
-        stock_b_gs = st.number_input("Stock B-GS", min_value=0, value=355_257, step=1000)
-        stock_c_gs = st.number_input("Stock C-GS", min_value=0, value=0, step=1000)
+        stock_a_gs = st.number_input("Stock A-GS", min_value=0, step=1000, key="s_a_gs")
+        stock_b_gs = st.number_input("Stock B-GS", min_value=0, step=1000, key="s_b_gs")
+        stock_c_gs = st.number_input("Stock C-GS", min_value=0, step=1000, key="s_c_gs")
 
-    st.subheader("Stocks MP (unités)")
-    stock_mp_n = st.number_input("Stock MP N", min_value=0, value=2_889_090, step=10000)
-    stock_mp_s = st.number_input("Stock MP S", min_value=0, value=687_500, step=10000)
+    st.subheader("📦 Stocks MP (unités)")
+    stock_mp_n = st.number_input("Stock MP N", min_value=0, step=10000, key="s_mp_n")
+    stock_mp_s = st.number_input("Stock MP S", min_value=0, step=10000, key="s_mp_s")
 
-    st.subheader("Effectifs & Équipements")
-    nb_ouvriers = st.number_input("Nb Ouvriers", min_value=0, value=580, step=10)
-    nb_machines_m1 = st.number_input("Nb Machines M1", min_value=0, value=18, step=1)
-    nb_machines_m2 = st.number_input("Nb Machines M2", min_value=0, value=0, step=1)
+    st.subheader("👷 Effectifs & Équipements")
+    nb_ouvriers = st.number_input("Nb Ouvriers", min_value=0, step=10, key="s_ouvriers")
+    nb_machines_m1 = st.number_input("Nb Machines M1", min_value=0, step=1, key="s_m1")
+    nb_machines_m2 = st.number_input("Nb Machines M2", min_value=0, step=1, key="s_m2")
 
-    st.subheader("Trésorerie & Dettes (K€)")
-    cash = st.number_input("Trésorerie", value=414.0, step=100.0)
-    dette_lt = st.number_input("Dette LT", min_value=0.0, value=5_600.0, step=100.0)
-    dette_ct = st.number_input("Dette CT", min_value=0.0, value=0.0, step=100.0)
+    st.subheader("💰 Trésorerie & Dettes (K€)")
+    cash = st.number_input("Trésorerie", step=100.0, key="s_cash")
+    dette_lt = st.number_input("Dette LT", min_value=0.0, step=100.0, key="s_dlt")
+    dette_ct = st.number_input("Dette CT", min_value=0.0, step=100.0, key="s_dct")
 
-    st.subheader("Indices")
-    indice_prix = st.number_input("Indice Prix", value=107.12, step=0.1)
-    indice_salaire = st.number_input("Indice Salaire", value=103.0, step=0.1)
+    st.subheader("📈 Indices")
+    indice_prix = st.number_input("Indice Prix", step=0.1, key="s_ip")
+    indice_salaire = st.number_input("Indice Salaire", step=0.1, key="s_is")
 
+    st.markdown("---")
+    
+    with st.expander("📝 Notes Personnelles"):
+        st.text_area(
+            "Vos notes (sauvegardées avec la session)",
+            value=st.session_state.get("user_notes", ""),
+            height=200,
+            key="user_notes",
+            placeholder="Écrivez vos remarques, stratégies ou calculs ici..."
+        )
 
-# Créer l'état initial
+# Create current state from sidebar inputs
 state = PeriodState(
     stock_a_ct=stock_a_ct,
     stock_a_gs=stock_a_gs,
@@ -107,15 +292,24 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("Décisions Produits")
 
+    # Button to reset all products to zero
+    if st.button("🔄 Remettre tous les produits à zéro"):
+        st.session_state.reset_products = True
+        st.rerun()
+
+    reset_products = st.session_state.get("reset_products", False)
+    if reset_products:
+        st.session_state.reset_products = False
+
     # Produit A
     st.subheader("Produit A")
     col_a1, col_a2 = st.columns(2)
 
     with col_a1:
         st.markdown("**Canal CT (Commerce Traditionnel)**")
-        a_ct_prix = st.number_input("011-A CT Prix Tarif (€/U)", min_value=0.0, value=20.60, step=0.10, key="a_ct_prix")
-        a_ct_promo = st.number_input("012- Promotion (€/U)", min_value=0.0, value=0.30, step=0.05, key="a_ct_promo")
-        a_ct_prod = st.number_input("013- Production (KU)", min_value=0, value=420, step=10, key="a_ct_prod")
+        a_ct_prix = st.number_input("011-A CT Prix Tarif (€/U)", min_value=0.0, value=0.0 if reset_products else 20.60, step=0.10, key="a_ct_prix")
+        a_ct_promo = st.number_input("012- Promotion (€/U)", min_value=0.0, value=0.0 if reset_products else 0.30, step=0.05, key="a_ct_promo")
+        a_ct_prod = st.number_input("013- Production (KU)", min_value=0, value=0 if reset_products else 420, step=10, key="a_ct_prod")
         a_ct_qual = st.selectbox("014- Qualité Produite (%)", [100, 50], index=0, key="a_ct_qual")
         a_ct_emb = st.checkbox("015- Emballages Recyclés", value=False, key="a_ct_emb")
 
@@ -144,10 +338,10 @@ with tabs[0]:
 
     with col_b2:
         st.markdown("**Canal GS (Grandes Surfaces)**")
-        b_gs_prix = st.number_input("041-B GS Prix Tarif (€/U)", min_value=0.0, value=22.40, step=0.10, key="b_gs_prix")
-        b_gs_rist = st.number_input("042- Ristourne (%)", min_value=0.0, max_value=20.0, value=7.0, step=0.5, key="b_gs_rist")
-        b_gs_promo = st.number_input("043- Promotion (€/U)", min_value=0.0, value=0.80, step=0.05, key="b_gs_promo")
-        b_gs_prod = st.number_input("044- Production (KU)", min_value=0, value=120, step=10, key="b_gs_prod")
+        b_gs_prix = st.number_input("041-B GS Prix Tarif (€/U)", min_value=0.0, value=0.0 if reset_products else 22.40, step=0.10, key="b_gs_prix")
+        b_gs_rist = st.number_input("042- Ristourne (%)", min_value=0.0, max_value=20.0, value=0.0 if reset_products else 7.0, step=0.5, key="b_gs_rist")
+        b_gs_promo = st.number_input("043- Promotion (€/U)", min_value=0.0, value=0.0 if reset_products else 0.80, step=0.05, key="b_gs_promo")
+        b_gs_prod = st.number_input("044- Production (KU)", min_value=0, value=0 if reset_products else 120, step=10, key="b_gs_prod")
         b_gs_qual = st.selectbox("045- Qualité Produite (%)", [100, 50], index=1, key="b_gs_qual")
         b_gs_emb = st.checkbox("046- Emballages Recyclés", value=False, key="b_gs_emb")
 
@@ -203,7 +397,6 @@ with tabs[1]:
         mkt_etudes_efgh = st.text_input("074- Études (E..H) ou N", value="N").upper()
 
     # Afficher coût des études
-    from src.mirage.calculator import calculate_study_costs
     cout_etudes = calculate_study_costs(mkt_etudes_abcd, mkt_etudes_efgh)
     st.info(f"💡 Coût des études: **{cout_etudes:.0f} K€**")
 
@@ -274,14 +467,14 @@ with tabs[3]:
         prod_m1_actives = st.number_input(
             "089- Machines M1 Actives",
             min_value=0,
-            max_value=nb_machines_m1,
+            max_value=nb_machines_m1 + 10,  # Allow buying new ones
             value=min(17, nb_machines_m1),
             step=1
         )
         prod_m2_actives = st.number_input(
             "090- Machines M2 Actives",
             min_value=0,
-            max_value=nb_machines_m2,
+            max_value=nb_machines_m2 + 10,
             value=0,
             step=1
         )
@@ -540,22 +733,25 @@ with tabs[6]:
     })
 
     # Filtrer les lignes avec production ou stock
-    stocks_df = stocks_df[
+    stocks_df_filtered = stocks_df[
         (stocks_df["Stock Initial"] > 0) |
         (stocks_df["Production"] > 0)
     ]
 
-    st.dataframe(
-        stocks_df.style.format({
-            "Stock Initial": "{:,.0f}",
-            "Production": "{:,.0f}",
-            "Stock Dispo": "{:,.0f}",
-            "Prix Net (€)": "{:.2f}",
-            "CA Potentiel (K€)": "{:,.0f}",
-        }),
-        use_container_width=True,
-        hide_index=True
-    )
+    if not stocks_df_filtered.empty:
+        st.dataframe(
+            stocks_df_filtered.style.format({
+                "Stock Initial": "{:,.0f}",
+                "Production": "{:,.0f}",
+                "Stock Dispo": "{:,.0f}",
+                "Prix Net (€)": "{:.2f}",
+                "CA Potentiel (K€)": "{:,.0f}",
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Aucune production ni stock disponible.")
 
     # Prévisions à remplir
     st.markdown("---")

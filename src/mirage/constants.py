@@ -25,8 +25,8 @@ M1_DEPRECIATION_YEARS = 10  # Amortissement sur 10 ans
 M2_DEPRECIATION_YEARS = 10
 
 # Workers
-WORKERS_PER_M1 = 40  # Ouvriers nécessaires par M1 active
-WORKERS_PER_M2 = 40  # Ouvriers nécessaires par M2 active
+WORKERS_PER_M1 = 20  # Ouvriers nécessaires par M1 active
+WORKERS_PER_M2 = 20  # Ouvriers nécessaires par M2 active
 WORKER_BASE_SALARY = 919  # Salaire de base (€/mois)
 SOCIAL_CHARGES_RATE = 0.45  # 45% de charges sociales
 
