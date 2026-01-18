@@ -14,6 +14,8 @@ class ProductDecision:
     production: int = 0  # KU
     qualite: int = 100  # % (100 ou 50)
     emballage_recycle: bool = False
+    ventes_contrat: int = 0  # Unités vendues sur contrat
+    achats_contrat: int = 0  # Unités achetées sur contrat
 
 
 @dataclass
@@ -116,6 +118,8 @@ class PeriodState:
     cash: float = 0.0
     dette_lt: float = 0.0
     dette_ct: float = 0.0
+    reserves: float = 0.0  # Réserves accumulées
+    resultat_n_1: float = 0.0  # Résultat net de l'année N-1 (ou période précédente)
 
     # Indices
     indice_prix: float = 100.0

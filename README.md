@@ -49,6 +49,32 @@ The application can import Markdown files with the following structure (same as 
 - `## Raw Materials` - Raw material inventory
 - `## Expenses` / `## Incomes` - Financial data
 
+## Règles de Gestion (Business Logic)
+
+L'application intègre les règles spécifiques suivantes dans son moteur de calcul :
+
+### 1. Gestion des Contrats (Priorité)
+- Les contrats sont honorés **avant** la vente sur le marché standard.
+- En cas de rupture sur contrat (`Stock Initial + Production < Demande Contrat`), une pénalité s'applique.
+- **Pénalité** : 50% du prix catalogue le plus élevé du trimestre pour chaque unité manquante.
+
+### 2. Ressources Humaines
+- **Ajustement automatique des effectifs** basé sur les besoins machines (20 ouvriers/machine).
+- **Besoin > Disponibles** : Recours automatique aux saisonniers.
+  - Coût Saisonnier = 1.5 x Coût Permanent (Majoration 50%).
+- **Besoin < Disponibles** : Mise en chômage technique.
+  - Coût Chômage = 0.5 x Coût Permanent (Salaire versé à 50%).
+
+### 3. Maintenance & Productivité
+- La maintenance est décisionnelle (case à cocher).
+- Si **Maintenance Active** : Coût fixe par machine appliqué. Capacité nominale (100%).
+- Si **Pas de Maintenance** : Économie du coût, mais **Perte de 5% de productivité** sur la capacité trimestrielle.
+
+### 4. Finance & Dividendes
+- La distribution de dividendes est libre mais **plafonnée réglementairement**.
+- Plafond = `10% * (Réserves + Résultat Net N-1)`.
+- Si la décision dépasse ce plafond, le simulateur réduit automatiquement le décaissement au montant autorisé.
+
 Example files: `Simulation - Md des données Year -3.md`, `Simulation Md des données year -2.md`
 
 ## Development

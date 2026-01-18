@@ -52,6 +52,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Sidebar: Documentation des règles
+with st.sidebar:
+    with st.expander("ℹ️ Règles de Gestion Actives"):
+        st.markdown("""
+        **1. Contrats & Stock**
+        - Priorité absolue aux contrats sur le stock disponible.
+        - **Pénalité de Rupture :** Si `(Stock + Prod) < Demande Contrat`, pénalité de 50% du prix le plus élevé.
+        
+        **2. RH & Production**
+        - **Saisonniers :** Embauche auto si `Besoin > Dispo`. Coût : **150%** du salaire.
+        - **Chômage Technique :** Mise au chômage auto si `Besoin < Dispo`. Coût : **50%** du salaire.
+        
+        **3. Maintenance Machines**
+        - Si case *Maintenance* décochée :
+            - Économie du coût de maintenance.
+            - **MALUS : -5%** de capacité de production sur toutes les machines.
+        
+        **4. Finance**
+        - **Dividendes :** Plafonnés à `10% * (Réserves + Résultat N-1)`. Le surplus est ignoré.
+        """)
+
 st.title("🏭 Mirage - Simulateur de Décisions")
 st.markdown("---")
 
@@ -325,6 +346,9 @@ with tabs[0]:
     a_ct_prod = decision_row("013- Production (KU)", "number", min_value=0, value=0 if reset_products else 420, step=10, key="a_ct_prod")
     a_ct_qual = decision_row("014- Qualité Produite (%)", "select", options=[100, 50], index=0, key="a_ct_qual")
     a_ct_emb = decision_row("015- Emballages Recyclés (O/N)", "checkbox", value=False, key="a_ct_emb")
+    with st.expander("Contrats A-CT"):
+        a_ct_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="a_ct_vc")
+        a_ct_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="a_ct_ac")
     
     # A-GS
     st.markdown("**Produit A - Grande Surface**")
@@ -334,6 +358,9 @@ with tabs[0]:
     a_gs_prod = decision_row("024- Production (KU)", "number", min_value=0, value=0, step=10, key="a_gs_prod")
     a_gs_qual = decision_row("025- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="a_gs_qual")
     a_gs_emb = decision_row("026- Emballages Recyclés (O/N)", "checkbox", value=False, key="a_gs_emb")
+    with st.expander("Contrats A-GS"):
+        a_gs_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="a_gs_vc")
+        a_gs_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="a_gs_ac")
 
     st.markdown("---")
 
@@ -345,6 +372,9 @@ with tabs[0]:
     b_ct_prod = decision_row("033- Production (KU)", "number", min_value=0, value=0, step=10, key="b_ct_prod")
     b_ct_qual = decision_row("034- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="b_ct_qual")
     b_ct_emb = decision_row("035- Emballages Recyclés (O/N)", "checkbox", value=False, key="b_ct_emb")
+    with st.expander("Contrats B-CT"):
+        b_ct_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="b_ct_vc")
+        b_ct_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="b_ct_ac")
 
     # B-GS
     st.markdown("**Produit B - Grande Surface**")
@@ -354,6 +384,9 @@ with tabs[0]:
     b_gs_prod = decision_row("044- Production (KU)", "number", min_value=0, value=0 if reset_products else 120, step=10, key="b_gs_prod")
     b_gs_qual = decision_row("045- Qualité Produite (%)", "select", options=[100, 50], index=1, key="b_gs_qual")
     b_gs_emb = decision_row("046- Emballages Recyclés (O/N)", "checkbox", value=False, key="b_gs_emb")
+    with st.expander("Contrats B-GS"):
+        b_gs_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="b_gs_vc")
+        b_gs_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="b_gs_ac")
 
     st.markdown("---")
 
@@ -365,6 +398,9 @@ with tabs[0]:
     c_ct_prod = decision_row("053- Production (KU)", "number", min_value=0, value=0, step=10, key="c_ct_prod")
     c_ct_qual = decision_row("054- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="c_ct_qual")
     c_ct_emb = decision_row("055- Emballages Recyclés (O/N)", "checkbox", value=False, key="c_ct_emb")
+    with st.expander("Contrats C-CT"):
+        c_ct_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="c_ct_vc")
+        c_ct_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="c_ct_ac")
 
     # C-GS
     st.markdown("**Produit C - Grande Surface**")
@@ -374,6 +410,10 @@ with tabs[0]:
     c_gs_prod = decision_row("064- Production (KU)", "number", min_value=0, value=0, step=10, key="c_gs_prod")
     c_gs_qual = decision_row("065- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="c_gs_qual")
     c_gs_emb = decision_row("066- Emballages Recyclés (O/N)", "checkbox", value=False, key="c_gs_emb")
+    with st.expander("Contrats C-GS"):
+        c_gs_v_contrat = decision_row("Ventes Contrat (U)", "number", min_value=0, value=0, step=100, key="c_gs_vc")
+        c_gs_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="c_gs_ac")
+
 
     st.markdown("---")
 
@@ -496,27 +536,33 @@ with tabs[0]:
     current_decisions = AllDecisions(
         produit_a_ct=ProductDecision(
             prix_tarif=a_ct_prix, promotion=a_ct_promo, production=a_ct_prod,
-            qualite=a_ct_qual, emballage_recycle=a_ct_emb
+            qualite=a_ct_qual, emballage_recycle=a_ct_emb,
+            ventes_contrat=a_ct_v_contrat, achats_contrat=a_ct_a_contrat
         ),
         produit_a_gs=ProductDecision(
             prix_tarif=a_gs_prix, ristourne=a_gs_rist, promotion=a_gs_promo,
-            production=a_gs_prod, qualite=a_gs_qual if a_gs_qual > 0 else 100, emballage_recycle=a_gs_emb
+            production=a_gs_prod, qualite=a_gs_qual if a_gs_qual > 0 else 100, emballage_recycle=a_gs_emb,
+            ventes_contrat=a_gs_v_contrat, achats_contrat=a_gs_a_contrat
         ),
         produit_b_ct=ProductDecision(
             prix_tarif=b_ct_prix, promotion=b_ct_promo, production=b_ct_prod,
-            qualite=b_ct_qual if b_ct_qual > 0 else 100, emballage_recycle=b_ct_emb
+            qualite=b_ct_qual if b_ct_qual > 0 else 100, emballage_recycle=b_ct_emb,
+            ventes_contrat=b_ct_v_contrat, achats_contrat=b_ct_a_contrat
         ),
         produit_b_gs=ProductDecision(
             prix_tarif=b_gs_prix, ristourne=b_gs_rist, promotion=b_gs_promo,
-            production=b_gs_prod, qualite=b_gs_qual, emballage_recycle=b_gs_emb
+            production=b_gs_prod, qualite=b_gs_qual, emballage_recycle=b_gs_emb,
+            ventes_contrat=b_gs_v_contrat, achats_contrat=b_gs_a_contrat
         ),
         produit_c_ct=ProductDecision(
             prix_tarif=c_ct_prix, promotion=c_ct_promo, production=c_ct_prod,
-            qualite=c_ct_qual if c_ct_qual > 0 else 100, emballage_recycle=c_ct_emb
+            qualite=c_ct_qual if c_ct_qual > 0 else 100, emballage_recycle=c_ct_emb,
+            ventes_contrat=c_ct_v_contrat, achats_contrat=c_ct_a_contrat
         ),
         produit_c_gs=ProductDecision(
             prix_tarif=c_gs_prix, ristourne=c_gs_rist, promotion=c_gs_promo,
-            production=c_gs_prod, qualite=c_gs_qual if c_gs_qual > 0 else 100, emballage_recycle=c_gs_emb
+            production=c_gs_prod, qualite=c_gs_qual if c_gs_qual > 0 else 100, emballage_recycle=c_gs_emb,
+            ventes_contrat=c_gs_v_contrat, achats_contrat=c_gs_a_contrat
         ),
         marketing=MarketingDecision(
             vendeurs_ct=mkt_vendeurs_ct, commission_ct=mkt_commission,
@@ -577,68 +623,7 @@ with tabs[0]:
 with tabs[1]:
 
     st.header("📊 Résultats Calculés")
-
-    # Construire les décisions
-    decisions = AllDecisions(
-        produit_a_ct=ProductDecision(
-            prix_tarif=a_ct_prix, promotion=a_ct_promo, production=a_ct_prod,
-            qualite=a_ct_qual, emballage_recycle=a_ct_emb
-        ),
-        produit_a_gs=ProductDecision(
-            prix_tarif=a_gs_prix, ristourne=a_gs_rist, promotion=a_gs_promo,
-            production=a_gs_prod, qualite=a_gs_qual if a_gs_qual > 0 else 100, emballage_recycle=a_gs_emb
-        ),
-        produit_b_ct=ProductDecision(
-            prix_tarif=b_ct_prix, promotion=b_ct_promo, production=b_ct_prod,
-            qualite=b_ct_qual if b_ct_qual > 0 else 100, emballage_recycle=b_ct_emb
-        ),
-        produit_b_gs=ProductDecision(
-            prix_tarif=b_gs_prix, ristourne=b_gs_rist, promotion=b_gs_promo,
-            production=b_gs_prod, qualite=b_gs_qual, emballage_recycle=b_gs_emb
-        ),
-        produit_c_ct=ProductDecision(
-            prix_tarif=c_ct_prix, promotion=c_ct_promo, production=c_ct_prod,
-            qualite=c_ct_qual if c_ct_qual > 0 else 100, emballage_recycle=c_ct_emb
-        ),
-        produit_c_gs=ProductDecision(
-            prix_tarif=c_gs_prix, ristourne=c_gs_rist, promotion=c_gs_promo,
-            production=c_gs_prod, qualite=c_gs_qual if c_gs_qual > 0 else 100, emballage_recycle=c_gs_emb
-        ),
-        marketing=MarketingDecision(
-            vendeurs_ct=mkt_vendeurs_ct, commission_ct=mkt_commission,
-            vendeurs_gs=mkt_vendeurs_gs, prime_trimestre_gs=mkt_prime_gs,
-            publicite_ct=mkt_pub_ct, publicite_gs=mkt_pub_gs,
-            etudes_abcd=mkt_etudes_abcd, etudes_efgh=mkt_etudes_efgh
-        ),
-        approvisionnement=ApprovisionnementDecision(
-            commandes_mp_n=app_mp_n, duree_contrat_n=app_duree_n,
-            commandes_mp_s=app_mp_s, duree_contrat_s=app_duree_s,
-            maintenance=app_maintenance
-        ),
-        production=ProductionDecision(
-            machines_m1_actives=prod_m1_actives, machines_m2_actives=prod_m2_actives,
-            ventes_m1=prod_ventes_m1, achats_m1=prod_achats_m1, achats_m2=prod_achats_m2,
-            emb_deb_ouvriers=prod_emb_deb, variation_pouvoir_achat=prod_var_pa
-        ),
-        rse=RSEDecision(
-            budget_recyclage=rse_recyclage, amenagements_adaptes=rse_amenagements,
-            recherche_dev=rse_rd
-        ),
-        finance=FinanceDecision(
-            emprunt_lt=fin_emprunt_lt, duree_emprunt_lt=fin_duree_lt,
-            effort_social=fin_effort_social, emprunt_ct=fin_emprunt_ct,
-            effets_escomptes=fin_effets, escompte_paiement_cpt=fin_escompte,
-            dividendes=fin_dividendes, rembt_dernier_emprunt=fin_rembt,
-            nb_actions_nouvelles=fin_actions_new, prix_emission=fin_prix_emission
-        ),
-        titres=TitresDecision(
-            actions_f1=titres_f1, actions_f2=titres_f2, actions_f3=titres_f3,
-            actions_f4=titres_f4, actions_f5=titres_f5, actions_f6=titres_f6
-        )
-    )
-
-    # Calculer les résultats
-    results = calculate_all(decisions, state)
+    results = sim_results
 
     # Afficher les warnings en premier
     if results.warnings:

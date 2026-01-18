@@ -45,6 +45,16 @@ VAT_RATE = 0.20  # 20% TVA
 QUALITY_BONUS_100 = 1.0
 QUALITY_MALUS_50 = 0.85
 
+# Labor Costs Modifiers
+SEASONAL_WORKER_COST_MULTIPLIER = 1.5  # 150% du salaire pour les saisonniers
+TECHNICAL_UNEMPLOYMENT_RATE = 0.5  # 50% du salaire de base pour chômage technique
+
+# Stockout
+STOCKOUT_PENALTY_RATE = 0.5  # 50% du prix catalogue le plus élevé du trimestre
+
+# Machine Productivity
+MACHINE_PRODUCTIVITY_LOSS = 0.05  # 5% de perte si pas de maintenance
+
 # Studies costs
 STUDY_A_COST = 2  # K€
 STUDY_B_COST = 2  # K€
