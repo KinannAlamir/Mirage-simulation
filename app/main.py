@@ -275,25 +275,34 @@ state = PeriodState(
 # MAIN AREA - Décisions
 # =====================================================
 
-# Tabs pour organiser les décisions
-tabs = st.tabs([
-    "🏷️ Produits",
-    "📢 Marketing",
-    "📦 Approvisionnements",
-    "🔧 Production",
-    "🌱 RSE",
-    "💰 Finances",
-    "📈 Résultats"
-])
+# Helper for table layout
+def decision_row(label, widget_type="number", **kwargs):
+    """Renders a decision row with label and input."""
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.markdown(f"**{label}**")
+    with col2:
+        # Use label_visibility="collapsed" to hide the widget's internal label
+        if widget_type == "number":
+            return st.number_input(label, label_visibility="collapsed", **kwargs)
+        elif widget_type == "select":
+            return st.selectbox(label, label_visibility="collapsed", **kwargs)
+        elif widget_type == "checkbox":
+            return st.checkbox("", **kwargs) # Checkbox label is weird when collapsed, using empty string
+        elif widget_type == "text":
+            return st.text_input(label, label_visibility="collapsed", **kwargs)
+
+# Tabs: Inputs vs Results
+tabs = st.tabs(["📝 Saisie des Décisions", "📊 Résultats & Analyse"])
 
 # =====================================================
-# TAB 1: PRODUITS
+# TAB 1: SAISIE DES DÉCISIONS (Table Unique)
 # =====================================================
 with tabs[0]:
-    st.header("Décisions Produits")
-
+    st.header("Tableau de Bord des Décisions")
+    
     # Button to reset all products to zero
-    if st.button("🔄 Remettre tous les produits à zéro"):
+    if st.button("🔄 Remettre tous les produits à zéro", key="reset_btn"):
         st.session_state.reset_products = True
         st.rerun()
 
@@ -301,280 +310,272 @@ with tabs[0]:
     if reset_products:
         st.session_state.reset_products = False
 
-    # Produit A
-    st.subheader("Produit A")
-    col_a1, col_a2 = st.columns(2)
+    # Header de la "Table"
+    st.markdown("---")
+    h1, h2 = st.columns([3, 2])
+    h1.markdown("#### Libellé des Décisions")
+    h2.markdown("#### Décision P. 1")
+    st.markdown("---")
 
-    with col_a1:
-        st.markdown("**Canal CT (Commerce Traditionnel)**")
-        a_ct_prix = st.number_input("011-A CT Prix Tarif (€/U)", min_value=0.0, value=0.0 if reset_products else 20.60, step=0.10, key="a_ct_prix")
-        a_ct_promo = st.number_input("012- Promotion (€/U)", min_value=0.0, value=0.0 if reset_products else 0.30, step=0.05, key="a_ct_promo")
-        a_ct_prod = st.number_input("013- Production (KU)", min_value=0, value=0 if reset_products else 420, step=10, key="a_ct_prod")
-        a_ct_qual = st.selectbox("014- Qualité Produite (%)", [100, 50], index=0, key="a_ct_qual")
-        a_ct_emb = st.checkbox("015- Emballages Recyclés", value=False, key="a_ct_emb")
-
-    with col_a2:
-        st.markdown("**Canal GS (Grandes Surfaces)**")
-        a_gs_prix = st.number_input("021-A GS Prix Tarif (€/U)", min_value=0.0, value=0.0, step=0.10, key="a_gs_prix")
-        a_gs_rist = st.number_input("022- Ristourne (%)", min_value=0.0, max_value=20.0, value=0.0, step=0.5, key="a_gs_rist")
-        a_gs_promo = st.number_input("023- Promotion (€/U)", min_value=0.0, value=0.0, step=0.05, key="a_gs_promo")
-        a_gs_prod = st.number_input("024- Production (KU)", min_value=0, value=0, step=10, key="a_gs_prod")
-        a_gs_qual = st.selectbox("025- Qualité Produite (%)", [100, 50, 0], index=2, key="a_gs_qual")
-        a_gs_emb = st.checkbox("026- Emballages Recyclés", value=False, key="a_gs_emb")
+    # --- PRODUIT A ---
+    st.subheader("PRODUIT A")
+    # A-CT
+    a_ct_prix = decision_row("011-A CT Prix Tarif (€/U)", "number", min_value=0.0, value=0.0 if reset_products else 20.60, step=0.10, key="a_ct_prix")
+    a_ct_promo = decision_row("012- Promotion (€/U)", "number", min_value=0.0, value=0.0 if reset_products else 0.30, step=0.05, key="a_ct_promo")
+    a_ct_prod = decision_row("013- Production (KU)", "number", min_value=0, value=0 if reset_products else 420, step=10, key="a_ct_prod")
+    a_ct_qual = decision_row("014- Qualité Produite (%)", "select", options=[100, 50], index=0, key="a_ct_qual")
+    a_ct_emb = decision_row("015- Emballages Recyclés (O/N)", "checkbox", value=False, key="a_ct_emb")
+    
+    # A-GS
+    st.markdown("**Produit A - Grande Surface**")
+    a_gs_prix = decision_row("021-A GS Prix Tarif (€/U)", "number", min_value=0.0, value=0.0, step=0.10, key="a_gs_prix")
+    a_gs_rist = decision_row("022- Ristourne (%)", "number", min_value=0.0, max_value=20.0, value=0.0, step=0.5, key="a_gs_rist")
+    a_gs_promo = decision_row("023- Promotion (€/U)", "number", min_value=0.0, value=0.0, step=0.05, key="a_gs_promo")
+    a_gs_prod = decision_row("024- Production (KU)", "number", min_value=0, value=0, step=10, key="a_gs_prod")
+    a_gs_qual = decision_row("025- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="a_gs_qual")
+    a_gs_emb = decision_row("026- Emballages Recyclés (O/N)", "checkbox", value=False, key="a_gs_emb")
 
     st.markdown("---")
 
-    # Produit B
-    st.subheader("Produit B")
-    col_b1, col_b2 = st.columns(2)
+    # --- PRODUIT B ---
+    st.subheader("PRODUIT B")
+    # B-CT
+    b_ct_prix = decision_row("031-B CT Prix Tarif (€/U)", "number", min_value=0.0, value=0.0, step=0.10, key="b_ct_prix")
+    b_ct_promo = decision_row("032- Promotion (€/U)", "number", min_value=0.0, value=0.0, step=0.05, key="b_ct_promo")
+    b_ct_prod = decision_row("033- Production (KU)", "number", min_value=0, value=0, step=10, key="b_ct_prod")
+    b_ct_qual = decision_row("034- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="b_ct_qual")
+    b_ct_emb = decision_row("035- Emballages Recyclés (O/N)", "checkbox", value=False, key="b_ct_emb")
 
-    with col_b1:
-        st.markdown("**Canal CT (Commerce Traditionnel)**")
-        b_ct_prix = st.number_input("031-B CT Prix Tarif (€/U)", min_value=0.0, value=0.0, step=0.10, key="b_ct_prix")
-        b_ct_promo = st.number_input("032- Promotion (€/U)", min_value=0.0, value=0.0, step=0.05, key="b_ct_promo")
-        b_ct_prod = st.number_input("033- Production (KU)", min_value=0, value=0, step=10, key="b_ct_prod")
-        b_ct_qual = st.selectbox("034- Qualité Produite (%)", [100, 50, 0], index=2, key="b_ct_qual")
-        b_ct_emb = st.checkbox("035- Emballages Recyclés", value=False, key="b_ct_emb")
-
-    with col_b2:
-        st.markdown("**Canal GS (Grandes Surfaces)**")
-        b_gs_prix = st.number_input("041-B GS Prix Tarif (€/U)", min_value=0.0, value=0.0 if reset_products else 22.40, step=0.10, key="b_gs_prix")
-        b_gs_rist = st.number_input("042- Ristourne (%)", min_value=0.0, max_value=20.0, value=0.0 if reset_products else 7.0, step=0.5, key="b_gs_rist")
-        b_gs_promo = st.number_input("043- Promotion (€/U)", min_value=0.0, value=0.0 if reset_products else 0.80, step=0.05, key="b_gs_promo")
-        b_gs_prod = st.number_input("044- Production (KU)", min_value=0, value=0 if reset_products else 120, step=10, key="b_gs_prod")
-        b_gs_qual = st.selectbox("045- Qualité Produite (%)", [100, 50], index=1, key="b_gs_qual")
-        b_gs_emb = st.checkbox("046- Emballages Recyclés", value=False, key="b_gs_emb")
+    # B-GS
+    st.markdown("**Produit B - Grande Surface**")
+    b_gs_prix = decision_row("041-B GS Prix Tarif (€/U)", "number", min_value=0.0, value=0.0 if reset_products else 22.40, step=0.10, key="b_gs_prix")
+    b_gs_rist = decision_row("042- Ristourne (%)", "number", min_value=0.0, max_value=20.0, value=0.0 if reset_products else 7.0, step=0.5, key="b_gs_rist")
+    b_gs_promo = decision_row("043- Promotion (€/U)", "number", min_value=0.0, value=0.0 if reset_products else 0.80, step=0.05, key="b_gs_promo")
+    b_gs_prod = decision_row("044- Production (KU)", "number", min_value=0, value=0 if reset_products else 120, step=10, key="b_gs_prod")
+    b_gs_qual = decision_row("045- Qualité Produite (%)", "select", options=[100, 50], index=1, key="b_gs_qual")
+    b_gs_emb = decision_row("046- Emballages Recyclés (O/N)", "checkbox", value=False, key="b_gs_emb")
 
     st.markdown("---")
 
-    # Produit C
-    st.subheader("Produit C")
-    col_c1, col_c2 = st.columns(2)
+    # --- PRODUIT C ---
+    st.subheader("PRODUIT C")
+    # C-CT
+    c_ct_prix = decision_row("051-C CT Prix Tarif (€/U)", "number", min_value=0.0, value=0.0, step=0.10, key="c_ct_prix")
+    c_ct_promo = decision_row("052- Promotion (€/U)", "number", min_value=0.0, value=0.0, step=0.05, key="c_ct_promo")
+    c_ct_prod = decision_row("053- Production (KU)", "number", min_value=0, value=0, step=10, key="c_ct_prod")
+    c_ct_qual = decision_row("054- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="c_ct_qual")
+    c_ct_emb = decision_row("055- Emballages Recyclés (O/N)", "checkbox", value=False, key="c_ct_emb")
 
-    with col_c1:
-        st.markdown("**Canal CT (Commerce Traditionnel)**")
-        c_ct_prix = st.number_input("051-C CT Prix Tarif (€/U)", min_value=0.0, value=0.0, step=0.10, key="c_ct_prix")
-        c_ct_promo = st.number_input("052- Promotion (€/U)", min_value=0.0, value=0.0, step=0.05, key="c_ct_promo")
-        c_ct_prod = st.number_input("053- Production (KU)", min_value=0, value=0, step=10, key="c_ct_prod")
-        c_ct_qual = st.selectbox("054- Qualité Produite (%)", [100, 50, 0], index=2, key="c_ct_qual")
-        c_ct_emb = st.checkbox("055- Emballages Recyclés", value=False, key="c_ct_emb")
+    # C-GS
+    st.markdown("**Produit C - Grande Surface**")
+    c_gs_prix = decision_row("061-C GS Prix Tarif (€/U)", "number", min_value=0.0, value=0.0, step=0.10, key="c_gs_prix")
+    c_gs_rist = decision_row("062- Ristourne (%)", "number", min_value=0.0, max_value=20.0, value=0.0, step=0.5, key="c_gs_rist")
+    c_gs_promo = decision_row("063- Promotion (€/U)", "number", min_value=0.0, value=0.0, step=0.05, key="c_gs_promo")
+    c_gs_prod = decision_row("064- Production (KU)", "number", min_value=0, value=0, step=10, key="c_gs_prod")
+    c_gs_qual = decision_row("065- Qualité Produite (%)", "select", options=[100, 50, 0], index=2, key="c_gs_qual")
+    c_gs_emb = decision_row("066- Emballages Recyclés (O/N)", "checkbox", value=False, key="c_gs_emb")
 
-    with col_c2:
-        st.markdown("**Canal GS (Grandes Surfaces)**")
-        c_gs_prix = st.number_input("061-C GS Prix Tarif (€/U)", min_value=0.0, value=0.0, step=0.10, key="c_gs_prix")
-        c_gs_rist = st.number_input("062- Ristourne (%)", min_value=0.0, max_value=20.0, value=0.0, step=0.5, key="c_gs_rist")
-        c_gs_promo = st.number_input("063- Promotion (€/U)", min_value=0.0, value=0.0, step=0.05, key="c_gs_promo")
-        c_gs_prod = st.number_input("064- Production (KU)", min_value=0, value=0, step=10, key="c_gs_prod")
-        c_gs_qual = st.selectbox("065- Qualité Produite (%)", [100, 50, 0], index=2, key="c_gs_qual")
-        c_gs_emb = st.checkbox("066- Emballages Recyclés", value=False, key="c_gs_emb")
+    st.markdown("---")
+
+    # --- MARKETING ---
+    st.subheader("MARKETING")
+    mkt_vendeurs_ct = decision_row("071- Nombre Vendeurs C.T.", "number", min_value=0, value=35, step=1)
+    mkt_commission = decision_row("072- Commission (% du C.A.)", "number", min_value=0.0, max_value=5.0, value=0.5, step=0.1)
+    mkt_etudes_abcd = decision_row("073- Etudes Codées (A..D) ou N", "text", value="ABC")
+    mkt_etudes_abcd = mkt_etudes_abcd.upper() # Post-process
+    
+    mkt_etudes_efgh = decision_row("074- Etudes Codées (E..H) ou N", "text", value="N")
+    mkt_etudes_efgh = mkt_etudes_efgh.upper() # Post-process
+
+    mkt_vendeurs_gs = decision_row("075- Nombre Vendeurs G.S.", "number", min_value=0, value=12, step=1)
+    mkt_prime_gs = decision_row("076- Prime Trimest. (€/Vendeur)", "number", min_value=0.0, value=600.0, step=50.0)
+    
+    # Note: 077 seems missing in original code's sequence or was skipped
+    
+    mkt_pub_ct = decision_row("078- Publicité C.T. (K€)", "number", min_value=0.0, value=400.0, step=50.0)
+    mkt_pub_gs = decision_row("079- Publicité G.S. (K€)", "number", min_value=0.0, value=0.0, step=50.0)
+
+    # Afficher coût des études (info only)
+    cout_etudes = calculate_study_costs(mkt_etudes_abcd, mkt_etudes_efgh)
+    st.caption(f"ℹ️ Coût des études estimé: {cout_etudes:.0f} K€")
+
+    st.markdown("---")
+
+    # --- APPROVISIONNEMENTS ---
+    st.subheader("APPROVISIONNEMENTS")
+    app_mp_n = decision_row("080- Commandes MP N (KU/per)", "number", min_value=0, value=0, step=500)
+    app_duree_n = decision_row("081- Durée contrat N (1-4)", "number", min_value=0, max_value=4, value=0, step=1)
+
+    app_mp_s = decision_row("082- Commandes MP S (KU/per)", "number", min_value=0, value=0, step=500)
+    app_duree_s = decision_row("083- Durée contrat S (1-4)", "number", min_value=0, max_value=4, value=0, step=1)
+    
+    app_maintenance = decision_row("086- Maintenance (O/N)", "checkbox", value=True)
+
+    # Info Prix MP expander
+    with st.expander("📋 Voir Grille de Prix MP"):
+        col_prix1, col_prix2 = st.columns(2)
+        with col_prix1:
+            st.markdown("**MP N**")
+            prix_n_df = pd.DataFrame({
+                "Durée": ["1 per", "2 per", "3 per", "4 per"],
+                "<1000": [1.235, 1.204, 1.173, 1.143],
+                "1000-1500": [1.204, 1.173, 1.143, 1.112],
+                ">3000": [1.081, 1.050, 1.019, 0.988], # Simplified for space
+            })
+            st.dataframe(prix_n_df, hide_index=True)
+        with col_prix2:
+            st.markdown("**MP S**")
+            st.caption("Voir onglet Résultats pour détails si besoin")
+
+    st.markdown("---")
+
+    # --- PRODUCTION ---
+    st.subheader("PRODUCTION & RSE")
+    
+    rse_recyclage = decision_row("087- Budget Recyclage (K€)", "number", min_value=0.0, value=0.0, step=50.0)
+    rse_amenagements = decision_row("088- Aménagements adaptés (K€)", "number", min_value=0.0, value=0.0, step=50.0)
+
+    prod_m1_actives = decision_row("089- Machines M1 Actives", "number", min_value=0, max_value=nb_machines_m1 + 10, value=min(17, nb_machines_m1), step=1)
+    prod_m2_actives = decision_row("090- Machines M2 Actives", "number", min_value=0, max_value=nb_machines_m2 + 10, value=0, step=1)
+
+    prod_ventes_m1 = decision_row("091- Ventes Machines M1", "number", min_value=0, value=0, step=1)
+    prod_achats_m1 = decision_row("092- Achats Machines M1", "number", min_value=0, value=0, step=1)
+    prod_achats_m2 = decision_row("093- Achats Machines M2", "number", min_value=0, value=0, step=1)
+
+    prod_emb_deb = decision_row("094- Emb/Deb. Ouvriers", "number", value=0, step=10)
+    prod_var_pa = decision_row("095- Variat. Pouvoir Achat (%)", "number", value=2.0, step=0.5)
+    
+    rse_rd = decision_row("096- Recherche et Dévelop. (K€)", "number", min_value=0.0, value=0.0, step=50.0)
+
+    # Info Capacité
+    capacite_m1 = prod_m1_actives * C.M1_CAPACITY_A
+    capacite_m2 = prod_m2_actives * C.M2_CAPACITY_A
+    capacite_totale = capacite_m1 + capacite_m2
+    ouvriers_apres = nb_ouvriers + prod_emb_deb
+    ouvriers_necessaires = prod_m1_actives * C.WORKERS_PER_M1 + prod_m2_actives * C.WORKERS_PER_M2
+    
+    if ouvriers_apres < ouvriers_necessaires:
+        st.error(f"⚠️ **Attention**: Manque {ouvriers_necessaires - ouvriers_apres} ouvriers pour faire tourner les machines!")
+    else:
+        st.caption(f"ℹ️ Capacité Totale: {capacite_totale:,.0f} U | Ouvriers dispo: {ouvriers_apres}")
+
+    st.markdown("---")
+
+    # --- FINANCES ---
+    st.subheader("FINANCES")
+    
+    fin_emprunt_lt = decision_row("097- Emprunt Long Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0)
+    fin_duree_lt = decision_row("098- Nb de Trimestres (2-8)", "number", min_value=0, max_value=8, value=0, step=1)
+    
+    fin_effort_social = decision_row("101- Effort Social (%)", "number", min_value=0.0, max_value=10.0, value=0.0, step=0.5)
+    fin_emprunt_ct = decision_row("102- Emprunt Court Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0)
+    fin_effets = decision_row("103- Effets escomptés (K€)", "number", min_value=0.0, value=0.0, step=100.0)
+    fin_escompte = decision_row("104- Escompte Paiement Cpt (%)", "number", min_value=0.0, max_value=10.0, value=7.5, step=0.5)
+    fin_dividendes = decision_row("105- Dividendes (K€)", "number", min_value=0.0, value=200.0, step=50.0)
+    fin_rembt = decision_row("106- Rembt. dernier emprunt", "checkbox", value=False)
+    
+    fin_actions_new = decision_row("107- Nb actions nouvelles (KU)", "number", min_value=0, value=0, step=10)
+    fin_prix_emission = decision_row("108- Prix d'emission (€)", "number", min_value=0.0, value=0.0, step=1.0)
+
+    st.markdown("---")
+    st.subheader("ACHATS / VENTES DE TITRES")
+    titres_f1 = decision_row("131- Actions F1", "number", value=0, step=100)
+    titres_f2 = decision_row("132- Actions F2", "number", value=0, step=100)
+    titres_f3 = decision_row("133- Actions F3", "number", value=0, step=100)
+    titres_f4 = decision_row("134- Actions F4", "number", value=0, step=100)
+    titres_f5 = decision_row("135- Actions F5", "number", value=0, step=100)
+    titres_f6 = decision_row("136- Actions F6", "number", value=0, step=100)
+
+    st.markdown("---")
+    
+    # --- PRÉVISIONS ---
+    st.subheader("PRÉVISIONS (Pour information)")
+
+    # Calcul intermédiaire pour aider à la saisie
+    # On reconstitue l'objet décisions avec les variables locales définies ci-dessus
+    current_decisions = AllDecisions(
+        produit_a_ct=ProductDecision(
+            prix_tarif=a_ct_prix, promotion=a_ct_promo, production=a_ct_prod,
+            qualite=a_ct_qual, emballage_recycle=a_ct_emb
+        ),
+        produit_a_gs=ProductDecision(
+            prix_tarif=a_gs_prix, ristourne=a_gs_rist, promotion=a_gs_promo,
+            production=a_gs_prod, qualite=a_gs_qual if a_gs_qual > 0 else 100, emballage_recycle=a_gs_emb
+        ),
+        produit_b_ct=ProductDecision(
+            prix_tarif=b_ct_prix, promotion=b_ct_promo, production=b_ct_prod,
+            qualite=b_ct_qual if b_ct_qual > 0 else 100, emballage_recycle=b_ct_emb
+        ),
+        produit_b_gs=ProductDecision(
+            prix_tarif=b_gs_prix, ristourne=b_gs_rist, promotion=b_gs_promo,
+            production=b_gs_prod, qualite=b_gs_qual, emballage_recycle=b_gs_emb
+        ),
+        produit_c_ct=ProductDecision(
+            prix_tarif=c_ct_prix, promotion=c_ct_promo, production=c_ct_prod,
+            qualite=c_ct_qual if c_ct_qual > 0 else 100, emballage_recycle=c_ct_emb
+        ),
+        produit_c_gs=ProductDecision(
+            prix_tarif=c_gs_prix, ristourne=c_gs_rist, promotion=c_gs_promo,
+            production=c_gs_prod, qualite=c_gs_qual if c_gs_qual > 0 else 100, emballage_recycle=c_gs_emb
+        ),
+        marketing=MarketingDecision(
+            vendeurs_ct=mkt_vendeurs_ct, commission_ct=mkt_commission,
+            vendeurs_gs=mkt_vendeurs_gs, prime_trimestre_gs=mkt_prime_gs,
+            publicite_ct=mkt_pub_ct, publicite_gs=mkt_pub_gs,
+            etudes_abcd=mkt_etudes_abcd, etudes_efgh=mkt_etudes_efgh
+        ),
+        approvisionnement=ApprovisionnementDecision(
+            commandes_mp_n=app_mp_n, duree_contrat_n=app_duree_n,
+            commandes_mp_s=app_mp_s, duree_contrat_s=app_duree_s,
+            maintenance=app_maintenance
+        ),
+        production=ProductionDecision(
+            machines_m1_actives=prod_m1_actives, machines_m2_actives=prod_m2_actives,
+            ventes_m1=prod_ventes_m1, achats_m1=prod_achats_m1, achats_m2=prod_achats_m2,
+            emb_deb_ouvriers=prod_emb_deb, variation_pouvoir_achat=prod_var_pa
+        ),
+        rse=RSEDecision(
+            budget_recyclage=rse_recyclage, amenagements_adaptes=rse_amenagements,
+            recherche_dev=rse_rd
+        ),
+        finance=FinanceDecision(
+            emprunt_lt=fin_emprunt_lt, duree_emprunt_lt=fin_duree_lt,
+            effort_social=fin_effort_social, emprunt_ct=fin_emprunt_ct,
+            effets_escomptes=fin_effets, escompte_paiement_cpt=fin_escompte,
+            dividendes=fin_dividendes, rembt_dernier_emprunt=fin_rembt,
+            nb_actions_nouvelles=fin_actions_new, prix_emission=fin_prix_emission
+        ),
+        titres=TitresDecision(
+            actions_f1=titres_f1, actions_f2=titres_f2, actions_f3=titres_f3,
+            actions_f4=titres_f4, actions_f5=titres_f5, actions_f6=titres_f6
+        )
+    )
+    
+    # Calcul anticipé
+    sim_results = calculate_all(current_decisions, state)
+
+    col_btn, col_info = st.columns([1, 2])
+    with col_btn:
+        if st.button("🪄 Pré-remplir avec les estimations", help="Recopie les résultats calculés dans les cases ci-dessous"):
+            st.session_state["prev_ca"] = float(sim_results.ca_potentiel_total)
+            st.session_state["prev_encaiss"] = float(sim_results.encaissements_total)
+            st.session_state["prev_decaiss"] = float(sim_results.decaissements_total)
+            # Pour le résultat, c'est une estimation plus complexe (Trésorerie fin - Trésorerie début ? Ou Résultat comptable ?)
+            # Ici on met la variation de tréso comme proxy ou 0, car le simulateur ne calcule pas encore le Compte de Résultat complet
+            st.session_state["prev_resultat"] = 0.0 
+            st.rerun()
+
+    prev_ca = decision_row("121- Prévision CA HT (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="prev_ca")
+    prev_resultat = decision_row("122- Prévision Résultat (K€)", "number", value=0.0, step=50.0, key="prev_resultat")
+    prev_encaiss = decision_row("123- Prévision Encaissem. (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="prev_encaiss")
+    prev_decaiss = decision_row("124- Prévision Décaissem. (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="prev_decaiss")
 
 
 # =====================================================
-# TAB 2: MARKETING
+# TAB 2: RÉSULTATS CALCULÉS
 # =====================================================
 with tabs[1]:
-    st.header("Décisions Marketing")
 
-    col_m1, col_m2 = st.columns(2)
-
-    with col_m1:
-        st.subheader("Commerce Traditionnel (CT)")
-        mkt_vendeurs_ct = st.number_input("071- Nombre Vendeurs CT", min_value=0, value=35, step=1)
-        mkt_commission = st.number_input("072- Commission (% du CA)", min_value=0.0, max_value=5.0, value=0.5, step=0.1)
-        mkt_pub_ct = st.number_input("078- Publicité CT (K€)", min_value=0.0, value=400.0, step=50.0)
-
-    with col_m2:
-        st.subheader("Grandes Surfaces (GS)")
-        mkt_vendeurs_gs = st.number_input("075- Nombre Vendeurs GS", min_value=0, value=12, step=1)
-        mkt_prime_gs = st.number_input("076- Prime Trimest. (€/Vendeur)", min_value=0.0, value=600.0, step=50.0)
-        mkt_pub_gs = st.number_input("079- Publicité GS (K€)", min_value=0.0, value=0.0, step=50.0)
-
-    st.subheader("Études de Marché")
-    col_e1, col_e2 = st.columns(2)
-    with col_e1:
-        mkt_etudes_abcd = st.text_input("073- Études (A..D) ou N", value="ABC").upper()
-    with col_e2:
-        mkt_etudes_efgh = st.text_input("074- Études (E..H) ou N", value="N").upper()
-
-    # Afficher coût des études
-    cout_etudes = calculate_study_costs(mkt_etudes_abcd, mkt_etudes_efgh)
-    st.info(f"💡 Coût des études: **{cout_etudes:.0f} K€**")
-
-
-# =====================================================
-# TAB 3: APPROVISIONNEMENTS
-# =====================================================
-with tabs[2]:
-    st.header("Décisions Approvisionnements")
-
-    col_ap1, col_ap2 = st.columns(2)
-
-    with col_ap1:
-        st.subheader("Matières Premières N (Qualité 100%)")
-        app_mp_n = st.number_input("080- Commandes MP N (KU/per)", min_value=0, value=0, step=500)
-        app_duree_n = st.number_input("081- Durée contrat N (1-4)", min_value=0, max_value=4, value=0, step=1)
-
-    with col_ap2:
-        st.subheader("Matières Premières S (Qualité 50%)")
-        app_mp_s = st.number_input("082- Commandes MP S (KU/per)", min_value=0, value=0, step=500)
-        app_duree_s = st.number_input("083- Durée contrat S (1-4)", min_value=0, max_value=4, value=0, step=1)
-
-    st.markdown("---")
-    app_maintenance = st.checkbox("086- Maintenance (O/N)", value=True)
-
-    # Afficher prix MP
-    st.subheader("📋 Grille de Prix MP (référence)")
-    st.markdown("*Prix HT applicables selon quantité et durée de contrat*")
-
-    col_prix1, col_prix2 = st.columns(2)
-    with col_prix1:
-        st.markdown("**MP N**")
-        prix_n_df = pd.DataFrame({
-            "Durée": ["1 per", "2 per", "3 per", "4 per"],
-            "<1000": [1.235, 1.204, 1.173, 1.143],
-            "1000-1500": [1.204, 1.173, 1.143, 1.112],
-            "1500-2000": [1.173, 1.143, 1.112, 1.081],
-            "2000-2500": [1.143, 1.112, 1.081, 1.050],
-            "2500-3000": [1.112, 1.081, 1.050, 1.019],
-            ">3000": [1.081, 1.050, 1.019, 0.988],
-        })
-        st.dataframe(prix_n_df, hide_index=True)
-
-    with col_prix2:
-        st.markdown("**MP S**")
-        prix_s_df = pd.DataFrame({
-            "Durée": ["1 per", "2 per", "3 per", "4 per"],
-            "<1000": [0.874, 0.852, 0.830, 0.808],
-            "1000-1500": [0.852, 0.830, 0.808, 0.786],
-            "1500-2000": [0.830, 0.808, 0.786, 0.764],
-            "2000-2500": [0.808, 0.786, 0.764, 0.743],
-            "2500-3000": [0.786, 0.764, 0.743, 0.721],
-            ">3000": [0.764, 0.743, 0.721, 0.699],
-        })
-        st.dataframe(prix_s_df, hide_index=True)
-
-
-# =====================================================
-# TAB 4: PRODUCTION
-# =====================================================
-with tabs[3]:
-    st.header("Décisions Production")
-
-    col_p1, col_p2 = st.columns(2)
-
-    with col_p1:
-        st.subheader("Machines")
-        prod_m1_actives = st.number_input(
-            "089- Machines M1 Actives",
-            min_value=0,
-            max_value=nb_machines_m1 + 10,  # Allow buying new ones
-            value=min(17, nb_machines_m1),
-            step=1
-        )
-        prod_m2_actives = st.number_input(
-            "090- Machines M2 Actives",
-            min_value=0,
-            max_value=nb_machines_m2 + 10,
-            value=0,
-            step=1
-        )
-
-        st.markdown("---")
-        st.subheader("Achats/Ventes Machines")
-        prod_ventes_m1 = st.number_input("091- Ventes Machines M1", min_value=0, value=0, step=1)
-        prod_achats_m1 = st.number_input("092- Achats Machines M1", min_value=0, value=0, step=1)
-        prod_achats_m2 = st.number_input("093- Achats Machines M2", min_value=0, value=0, step=1)
-
-    with col_p2:
-        st.subheader("Personnel")
-        prod_emb_deb = st.number_input("094- Emb/Deb. Ouvriers", value=0, step=10)
-        prod_var_pa = st.number_input("095- Variat. Pouvoir Achat (%)", value=2.0, step=0.5)
-
-        st.markdown("---")
-        # Calculs capacité
-        capacite_m1 = prod_m1_actives * C.M1_CAPACITY_A
-        capacite_m2 = prod_m2_actives * C.M2_CAPACITY_A
-        capacite_totale = capacite_m1 + capacite_m2
-
-        ouvriers_apres = nb_ouvriers + prod_emb_deb
-        ouvriers_necessaires = prod_m1_actives * C.WORKERS_PER_M1 + prod_m2_actives * C.WORKERS_PER_M2
-
-        st.subheader("📊 Capacités Calculées")
-        st.metric("Capacité M1 (unités A)", f"{capacite_m1:,.0f}")
-        st.metric("Capacité M2 (unités A)", f"{capacite_m2:,.0f}")
-        st.metric("Capacité Totale", f"{capacite_totale:,.0f}")
-
-        st.markdown("---")
-        st.subheader("👷 Ouvriers")
-        st.metric("Ouvriers après décision", ouvriers_apres)
-        st.metric("Ouvriers nécessaires", ouvriers_necessaires)
-        if ouvriers_apres < ouvriers_necessaires:
-            st.error(f"⚠️ Manque {ouvriers_necessaires - ouvriers_apres} ouvriers!")
-
-
-# =====================================================
-# TAB 5: RSE
-# =====================================================
-with tabs[4]:
-    st.header("Décisions RSE")
-
-    col_r1, col_r2, col_r3 = st.columns(3)
-
-    with col_r1:
-        rse_recyclage = st.number_input("087- Budget Recyclage (K€)", min_value=0.0, value=0.0, step=50.0)
-    with col_r2:
-        rse_amenagements = st.number_input("088- Aménagements adaptés (K€)", min_value=0.0, value=0.0, step=50.0)
-    with col_r3:
-        rse_rd = st.number_input("096- Recherche et Dévelop. (K€)", min_value=0.0, value=0.0, step=50.0)
-
-    st.info("💡 Ces investissements améliorent votre indicateur RSE et peuvent débloquer le label Mir'EcoCert.")
-
-
-# =====================================================
-# TAB 6: FINANCES
-# =====================================================
-with tabs[5]:
-    st.header("Décisions Financières")
-
-    col_f1, col_f2 = st.columns(2)
-
-    with col_f1:
-        st.subheader("Emprunts")
-        fin_emprunt_lt = st.number_input("097- Emprunt Long Terme (K€)", min_value=0.0, value=0.0, step=100.0)
-        fin_duree_lt = st.number_input("098- Nb de Trimestres (2-8)", min_value=0, max_value=8, value=0, step=1)
-        fin_emprunt_ct = st.number_input("102- Emprunt Court Terme (K€)", min_value=0.0, value=0.0, step=100.0)
-        fin_effets = st.number_input("103- Effets escomptés (K€)", min_value=0.0, value=0.0, step=100.0)
-        fin_rembt = st.checkbox("106- Rembt. dernier emprunt", value=False)
-
-    with col_f2:
-        st.subheader("Autres")
-        fin_effort_social = st.number_input("101- Effort Social (%)", min_value=0.0, max_value=10.0, value=0.0, step=0.5)
-        fin_escompte = st.number_input("104- Escompte Paiement Cpt (%)", min_value=0.0, max_value=10.0, value=7.5, step=0.5)
-        fin_dividendes = st.number_input("105- Dividendes (K€)", min_value=0.0, value=200.0, step=50.0)
-
-        st.markdown("---")
-        st.subheader("Augmentation de Capital")
-        fin_actions_new = st.number_input("107- Nb actions nouvelles (KU)", min_value=0, value=0, step=10)
-        fin_prix_emission = st.number_input("108- Prix d'emission (€)", min_value=0.0, value=0.0, step=1.0)
-
-    st.markdown("---")
-    st.subheader("Achats/Ventes de Titres")
-    col_t1, col_t2, col_t3 = st.columns(3)
-    with col_t1:
-        titres_f1 = st.number_input("131- Actions F1", value=0, step=100)
-        titres_f2 = st.number_input("132- Actions F2", value=0, step=100)
-    with col_t2:
-        titres_f3 = st.number_input("133- Actions F3", value=0, step=100)
-        titres_f4 = st.number_input("134- Actions F4", value=0, step=100)
-    with col_t3:
-        titres_f5 = st.number_input("135- Actions F5", value=0, step=100)
-        titres_f6 = st.number_input("136- Actions F6", value=0, step=100)
-
-
-# =====================================================
-# TAB 7: RÉSULTATS CALCULÉS
-# =====================================================
-with tabs[6]:
     st.header("📊 Résultats Calculés")
 
     # Construire les décisions
@@ -752,18 +753,6 @@ with tabs[6]:
         )
     else:
         st.info("Aucune production ni stock disponible.")
-
-    # Prévisions à remplir
-    st.markdown("---")
-    st.subheader("📝 Prévisions (à renseigner)")
-
-    col_prev1, col_prev2 = st.columns(2)
-    with col_prev1:
-        prev_ca = st.number_input("121- Prévision CA HT (K€)", min_value=0.0, value=0.0, step=100.0)
-        prev_resultat = st.number_input("122- Prévision Résultat (K€)", value=0.0, step=50.0)
-    with col_prev2:
-        prev_encaiss = st.number_input("123- Prévision Encaissem. (K€)", min_value=0.0, value=0.0, step=100.0)
-        prev_decaiss = st.number_input("124- Prévision Décaissem. (K€)", min_value=0.0, value=0.0, step=100.0)
 
     st.info(f"""
     💡 **Suggestions basées sur les calculs:**
