@@ -97,6 +97,9 @@ class TitresDecision:
 class PeriodState:
     """État de la firme à une période donnée."""
 
+    # Période de l'année (1, 2, 3 ou 4)
+    period_num: int = 1
+
     # Stocks de produits finis
     stock_a_ct: int = 0
     stock_a_gs: int = 0
@@ -171,6 +174,7 @@ class CalculatedResults:
     cout_etudes: float = 0.0
 
     # Revenus estimés (si tout vendu)
+    ca_contrats: float = 0.0
     ca_potentiel_a_ct: float = 0.0
     ca_potentiel_a_gs: float = 0.0
     ca_potentiel_b_ct: float = 0.0
@@ -211,6 +215,17 @@ class CalculatedResults:
 
     # Warnings
     warnings: list = field(default_factory=list)
+
+    # Marges analytiques (pour affichage par section)
+    cout_prod_a: float = 0.0
+    cout_prod_b: float = 0.0
+    cout_prod_c: float = 0.0
+
+    marge_sur_cout_variable_a: float = 0.0
+    marge_sur_cout_variable_b: float = 0.0
+    marge_sur_cout_variable_c: float = 0.0
+
+    cout_marketing_total_section: float = 0.0
 
 
 @dataclass

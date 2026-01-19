@@ -2,7 +2,7 @@
 
 # Production constants
 UNITS_MP_PER_UNIT_A = 5  # Unités de MP N ou S par unité de produit A
-UNITS_MP_PER_UNIT_B = 3.5  # Unités de MP N ou S par unité de produit B
+UNITS_MP_PER_UNIT_B = 7  # Unités de MP N ou S par unité de produit B
 UNITS_MP_PER_UNIT_C = 10  # Unités de MP N ou S par unité de produit C
 
 # Machine capacities (per machine per period)
@@ -27,12 +27,20 @@ M2_DEPRECIATION_YEARS = 10
 # Workers
 WORKERS_PER_M1 = 20  # Ouvriers nécessaires par M1 active
 WORKERS_PER_M2 = 20  # Ouvriers nécessaires par M2 active
-WORKER_BASE_SALARY = 919  # Salaire de base (€/mois)
+WORKER_BASE_SALARY = 950  # Salaire de base (€/mois)
 SOCIAL_CHARGES_RATE = 0.45  # 45% de charges sociales
 
+# Absenteeism Rates (Congés payés)
+ABSENTEEISM_RATES = {
+    1: 0.035, # 3.5%
+    2: 0.040, # 4.0%
+    3: 0.210, # 21.0%
+    4: 0.035  # 3.5%
+}
+
 # Salesforce
-TO_SALESPERSON_SALARY = 1_792  # Salaire vendeur CT (€/mois)
-MR_SALESPERSON_SALARY = 2_354  # Salaire vendeur GS (€/mois)
+TO_SALESPERSON_SALARY = 1_307  # Salaire vendeur CT (€/mois)
+MR_SALESPERSON_SALARY = 2_091  # Salaire vendeur GS (€/mois) (= 1.6 * 1307)
 
 # Maintenance cost per active machine
 MAINTENANCE_COST_M1 = 9  # K€ par période si maintenance active
@@ -56,13 +64,13 @@ STOCKOUT_PENALTY_RATE = 0.5  # 50% du prix catalogue le plus élevé du trimestr
 MACHINE_PRODUCTIVITY_LOSS = 0.05  # 5% de perte si pas de maintenance
 
 # Studies costs
-STUDY_A_COST = 2  # K€
-STUDY_B_COST = 2  # K€
+STUDY_A_COST = 10  # K€
+STUDY_B_COST = 10  # K€
 STUDY_C_COST = 2  # K€
-STUDY_D_COST = 5  # K€
-STUDY_E_COST = 5  # K€
-STUDY_F_COST = 5  # K€
-STUDY_G_COST = 5  # K€
+STUDY_D_COST = 20  # K€
+STUDY_E_COST = 20  # K€
+STUDY_F_COST = 500  # K€
+STUDY_G_COST = 20  # K€
 STUDY_H_COST = 10  # K€
 
 # Interest rates (approximate)
@@ -84,3 +92,6 @@ RM_S_PRICES = {
     3: {3000: 0.69, 2500: 0.71, 2000: 0.73, 1500: 0.75, 1000: 0.79},
     4: {3000: 0.67, 2500: 0.69, 2000: 0.71, 1500: 0.73, 1000: 0.77},
 }
+
+# Recycled Packaging
+RECYCLED_PACKAGING_ROYALTY_RATE = 0.02  # 2% du prix de vente net

@@ -29,8 +29,15 @@ def calculate_study_costs(etudes_abcd: str, etudes_efgh: str) -> float:
     return cost
 
 
-def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResults:
-    """Calcule tous les résultats à partir des décisions et de l'état actuel."""
+def calculate_all(decisions: AllDecisions, state: PeriodState, forecast_sales: dict[str, int] = None) -> CalculatedResults:
+    """Calcule tous les résultats à partir des décisions et de l'état actuel.
+    
+    Args:
+        decisions: Les décisions prises pour le tour.
+        state: L'état du système en début de tour.
+        forecast_sales: Dictionnaire optionnel contenant les prévisions de vente (en unités) 
+                        pour chaque produit ('A-CT', 'A-GS', etc.) afin d'ajuster le CA prévisionnel.
+    """
     results = CalculatedResults()
     results.warnings = []
 
@@ -108,10 +115,15 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
 
     def add_mp_needs(qty_mp, qualite):
         nonlocal mp_n_needed, mp_s_needed
-        if qualite == 100:
-            mp_n_needed += qty_mp
-        else:
-            mp_s_needed += qty_mp
+        # Répartition proportionnelle à la qualité
+        # Qualité 100 => 100% N, 0% S
+        # Qualité 50 => 50% N, 50% S
+        # Qualité 0 => 0% N, 100% S
+        ratio_n = qualite / 100.0
+        ratio_s = 1.0 - ratio_n
+        
+        mp_n_needed += qty_mp * ratio_n
+        mp_s_needed += qty_mp * ratio_s
 
     add_mp_needs(mp_a_ct, decisions.produit_a_ct.qualite)
     add_mp_needs(mp_a_gs, decisions.produit_a_gs.qualite)
@@ -148,23 +160,69 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
         )
 
     # =========================================================================
-    # 4. BESOINS EN OUVRIERS
+    # 4. BESOINS EN OUVRIERS (Avec Absentéisme)
     # =========================================================================
     results.ouvriers_necessaires = (
         m1_active * C.WORKERS_PER_M1 + m2_active * C.WORKERS_PER_M2
     )
     
-    results.ouvriers_disponibles = state.nb_ouvriers + decisions.production.emb_deb_ouvriers
+    # Total ouvriers sous contrat (Permanents)
+    # Départs à la retraite (Début de trimestre)
+    # Règle : 20 personnes partent 1 trimestre sur 2, en commençant à P1.
+    # P1 : -20 (Total cumulé -20)
+    # P2 : 0 (Total cumulé -20)
+    # P3 : -20 (Total cumulé -40)
+    # P4 : 0 (Total cumulé -40)
+    
+    nb_retraites_current = 20 if (state.period_num % 2 != 0) else 0
+    
+    nb_retraites_past = 0
+    if state.period_num >= 2:
+        nb_retraites_past += 20 # Depart de P1
+    if state.period_num >= 4:
+        nb_retraites_past += 20 # Depart de P3 (Si on est en P4)
+        
+    # Note: Si on est en P3, current=20 et past=20 (Celui de P1). Total = 40.
+    
+    nb_retraites_total = nb_retraites_current + nb_retraites_past
+
+    if nb_retraites_current > 0:
+        results.warnings.append(f"ℹ️ Départ en retraite de {nb_retraites_current} ouvriers ce trimestre.")
+    if nb_retraites_past > 0:
+        results.warnings.append(f"ℹ️ Effet cumulé retraites passées : -{nb_retraites_past} ouvriers.")
+    
+    total_permanents = state.nb_ouvriers + decisions.production.emb_deb_ouvriers - nb_retraites_total
+    
+    # Calc absenteisme
+    taux_absenteisme = C.ABSENTEEISM_RATES.get(state.period_num, 0.0)
+    nb_absents = int(total_permanents * taux_absenteisme)
+
+    # 200 ouvriers sont affectés à l'atelier M en permanence et ne produisent pas sur M1/M2
+    NB_OUVRIERS_ATELIER_M = 200
+    
+    # Ouvriers réellement présents pour travailler sur M1/M2
+    # On retire les absents et ceux de l'atelier M
+    results.ouvriers_disponibles = total_permanents - nb_absents - NB_OUVRIERS_ATELIER_M
+    
     results.variation_ouvriers = decisions.production.emb_deb_ouvriers
     
     nb_saisonniers = 0
     nb_chomage = 0
+    
+    # Besoin vs Présents
     if results.ouvriers_necessaires > results.ouvriers_disponibles:
+        # On manque de bras présents -> Saisonniers
         nb_saisonniers = results.ouvriers_necessaires - results.ouvriers_disponibles
-        results.warnings.append(f"ℹ️ Recours à {nb_saisonniers} ouvriers saisonniers")
-    elif results.ouvriers_necessaires < results.ouvriers_disponibles:
+        results.warnings.append(f"ℹ️ Recours à {nb_saisonniers} saisonniers (Dont couverture de {nb_absents} absents + {NB_OUVRIERS_ATELIER_M} atelier M)")
+    else:
+        # Trop de présents -> Chômage technique
         nb_chomage = results.ouvriers_disponibles - results.ouvriers_necessaires
-        results.warnings.append(f"ℹ️ {nb_chomage} ouvriers en chômage technique")
+        if nb_absents > 0:
+            results.warnings.append(f"ℹ️ {nb_absents} ouvriers absents (Congés {taux_absenteisme*100}%)")
+        if nb_chomage > 0:
+            # On détaille le calcul pour rassurer l'utilisateur
+            msg_detail = f"Dispo Prod ({total_permanents} tot - {nb_absents} abs - {NB_OUVRIERS_ATELIER_M} At.M = {results.ouvriers_disponibles}) - Besoin Machines {results.ouvriers_necessaires}"
+            results.warnings.append(f"ℹ️ {nb_chomage} ouvriers en chômage technique ({msg_detail})")
 
     # =========================================================================
     # 5. COÛTS DE PRODUCTION
@@ -177,16 +235,29 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
     # Coût main d'œuvre
     salaire_base_h = C.WORKER_BASE_SALARY * (1 + state.indice_salaire / 100 - 1)
     
-    # Coût permanents (Actifs + Chômage)
+    # Coût Permanents : On paie TOUS les permanents 
+    # Structure de paiement:
+    # - Absents : Payés 100%
+    # - Atelier M : Payés 100%
+    # - Actifs Prod : Payés 100%
+    # - Chômage Tech : Payés 50% (approx C.TECHNICAL_UNEMPLOYMENT_RATE)
+    
+    cout_permanents = 0.0
     if nb_chomage > 0:
-        # Les ouvriers en trop sont payés à 50%
-        # nb_chomage est déjà calculé comme dispo - necessaire
-        # Ouvriers actifs = necessaire (qui est < dispo ici)
+        # Cas Chômage
+        # Présents_Disponibles = Necessaires + Chômage
         actifs_perm = results.ouvriers_necessaires
-        cout_permanents = (actifs_perm * salaire_base_h * 3) + (nb_chomage * salaire_base_h * 3 * C.TECHNICAL_UNEMPLOYMENT_RATE)
+        
+        cout_absents = nb_absents * salaire_base_h * 3
+        cout_atelier_m = NB_OUVRIERS_ATELIER_M * salaire_base_h * 3
+        cout_actifs = actifs_perm * salaire_base_h * 3
+        cout_chomeurs = nb_chomage * salaire_base_h * 3 * C.TECHNICAL_UNEMPLOYMENT_RATE
+        
+        cout_permanents = cout_absents + cout_atelier_m + cout_actifs + cout_chomeurs
     else:
-        # Tous les disponibles sont payés à 100% (même s'ils sont moins que nécessaire, le reste c'est saisonniers)
-        cout_permanents = results.ouvriers_disponibles * salaire_base_h * 3
+        # Cas Plein emploi ou Saisonniers
+        # Tous les permanents sont payés à 100% (Absents + Atelier M + DispoProd inclus)
+        cout_permanents = total_permanents * salaire_base_h * 3
 
     cout_saisonniers = nb_saisonniers * salaire_base_h * 3 * C.SEASONAL_WORKER_COST_MULTIPLIER
     
@@ -241,6 +312,8 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
     cout_vendeurs_gs_fixe = decisions.marketing.vendeurs_gs * C.MR_SALESPERSON_SALARY * 3
     primes_gs = decisions.marketing.vendeurs_gs * decisions.marketing.prime_trimestre_gs
 
+    # Commissions seulement pour les vendeurs CT
+    # Les vendeurs GS n'ont pas de commission, seulement une prime trimestrielle fixe par vendeur
     total_remun_vendeurs = cout_vendeurs_ct_fixe + commissions_ct + cout_vendeurs_gs_fixe + primes_gs
     results.cout_vendeurs = (total_remun_vendeurs * (1 + C.SOCIAL_CHARGES_RATE) / 1000)
 
@@ -321,13 +394,50 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
         1 - decisions.produit_c_gs.ristourne / 100
     )
 
+    # Fonction locale pour limiter les ventes aux disponibilités ou aux prévisions manuelles
+    def get_sales_vol(code, dispo):
+        if forecast_sales and code in forecast_sales:
+            # On ne peut pas vendre plus que disponible
+            return min(dispo, float(forecast_sales[code]))
+        return dispo
+
     # CA potentiel (si tout vendu)
-    results.ca_potentiel_a_ct = results.stock_dispo_a_ct * results.prix_net_a_ct / 1000
-    results.ca_potentiel_a_gs = results.stock_dispo_a_gs * results.prix_net_a_gs / 1000
-    results.ca_potentiel_b_ct = results.stock_dispo_b_ct * results.prix_net_b_ct / 1000
-    results.ca_potentiel_b_gs = results.stock_dispo_b_gs * results.prix_net_b_gs / 1000
-    results.ca_potentiel_c_ct = results.stock_dispo_c_ct * results.prix_net_c_ct / 1000
-    results.ca_potentiel_c_gs = results.stock_dispo_c_gs * results.prix_net_c_gs / 1000
+    vol_a_ct = get_sales_vol("A-CT", results.stock_dispo_a_ct)
+    results.ca_potentiel_a_ct = vol_a_ct * results.prix_net_a_ct / 1000
+
+    vol_a_gs = get_sales_vol("A-GS", results.stock_dispo_a_gs)
+    results.ca_potentiel_a_gs = vol_a_gs * results.prix_net_a_gs / 1000
+
+    vol_b_ct = get_sales_vol("B-CT", results.stock_dispo_b_ct)
+    results.ca_potentiel_b_ct = vol_b_ct * results.prix_net_b_ct / 1000
+
+    vol_b_gs = get_sales_vol("B-GS", results.stock_dispo_b_gs)
+    results.ca_potentiel_b_gs = vol_b_gs * results.prix_net_b_gs / 1000
+
+    vol_c_ct = get_sales_vol("C-CT", results.stock_dispo_c_ct)
+    results.ca_potentiel_c_ct = vol_c_ct * results.prix_net_c_ct / 1000
+
+    vol_c_gs = get_sales_vol("C-GS", results.stock_dispo_c_gs)
+    results.ca_potentiel_c_gs = vol_c_gs * results.prix_net_c_gs / 1000
+
+    # CA des Contrats (Considéré comme acquis si stock suffisant, sinon pénalité déjà comptée)
+    # On prend le min(demande, dispo_avant_standard) pour calculer le vrai CA réalisé sur contrat
+    # Cependant, la logique de stock_dispo a déjà retiré les ventes contrats du stock.
+    # On suppose ici que si pas de rupture majeure, le contrat est honoré.
+    # Pour être précis, on va recalculer ce qui a été réellement vendu aux contrats.
+    
+    def get_ca_contrat(vente_contrat, stock_init, prod_u, achat_u, prix_net):
+        dispo = stock_init + prod_u + achat_u
+        vendu = min(vente_contrat, dispo)
+        return vendu * prix_net / 1000
+
+    results.ca_contrats = 0.0
+    results.ca_contrats += get_ca_contrat(decisions.produit_a_ct.ventes_contrat, state.stock_a_ct, prod_a_ct, decisions.produit_a_ct.achats_contrat, results.prix_net_a_ct)
+    results.ca_contrats += get_ca_contrat(decisions.produit_a_gs.ventes_contrat, state.stock_a_gs, prod_a_gs, decisions.produit_a_gs.achats_contrat, results.prix_net_a_gs)
+    results.ca_contrats += get_ca_contrat(decisions.produit_b_ct.ventes_contrat, state.stock_b_ct, prod_b_ct, decisions.produit_b_ct.achats_contrat, results.prix_net_b_ct)
+    results.ca_contrats += get_ca_contrat(decisions.produit_b_gs.ventes_contrat, state.stock_b_gs, prod_b_gs, decisions.produit_b_gs.achats_contrat, results.prix_net_b_gs)
+    results.ca_contrats += get_ca_contrat(decisions.produit_c_ct.ventes_contrat, state.stock_c_ct, prod_c_ct, decisions.produit_c_ct.achats_contrat, results.prix_net_c_ct)
+    results.ca_contrats += get_ca_contrat(decisions.produit_c_gs.ventes_contrat, state.stock_c_gs, prod_c_gs, decisions.produit_c_gs.achats_contrat, results.prix_net_c_gs)
 
     results.ca_potentiel_total = (
         results.ca_potentiel_a_ct
@@ -336,7 +446,28 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
         + results.ca_potentiel_b_gs
         + results.ca_potentiel_c_ct
         + results.ca_potentiel_c_gs
+        + results.ca_contrats  # Ajout des contrats au CA Potentiel global (Total = Standard Potential + Contrats Acquis)
     )
+
+    # Coût de l'emballage recyclé (2% du CA Potentiel Net si activé)
+    cout_emb_recycle = 0.0
+    if decisions.produit_a_ct.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_a_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE
+    if decisions.produit_a_gs.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_a_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE
+    if decisions.produit_b_ct.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_b_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE
+    if decisions.produit_b_gs.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_b_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE
+    if decisions.produit_c_ct.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_c_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE
+    if decisions.produit_c_gs.emballage_recycle:
+        cout_emb_recycle += results.ca_potentiel_c_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE
+
+    if cout_emb_recycle > 0:
+        results.warnings.append(f"ℹ️ Coût emballage recyclé estimé : {cout_emb_recycle:.1f} K€")
+        # Ajout aux coûts commerciaux pour analyse
+        results.cout_commercial_total += cout_emb_recycle
 
     # =========================================================================
     # 9. CASH FLOWS ESTIMÉS
@@ -368,6 +499,7 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
         + decisions.rse.amenagements_adaptes
         + decisions.rse.recherche_dev
         + cout_rupture_total
+        + cout_emb_recycle
     )
 
     results.decaissements_total = (
@@ -402,5 +534,88 @@ def calculate_all(decisions: AllDecisions, state: PeriodState) -> CalculatedResu
         results.warnings.append(
             f"⚠️ Trésorerie estimée négative: {results.tresorerie_estimee:,.0f} K€"
         )
+        # Note: In reality, overdraft fees apply, but here we just warn.
+
+    # =========================================================================
+    # X. ANALYSE DE RENTABILITÉ PAR PRODUIT (Estimateur)
+    # =========================================================================
+    # On éclate les coûts globaux (MP, MO, Amortissement) au prorata des quantités produites (simplification)
+    # Pour être précis, on devrait utiliser les standards de temps et MP.
+
+    # 1. Coût Direct de Production par Produit (MP + MO Directe)
+    # On refait le calcul MP individuel pour l'avoir par produit
+    def get_mp_cost(prod_u, units_per_prod, qualite):
+        ratio_n = qualite / 100.0
+        ratio_s = 1.0 - ratio_n
+        qty_mp = prod_u * units_per_prod
+        cost = (qty_mp * ratio_n * prix_mp_n + qty_mp * ratio_s * prix_mp_s) / 1000
+        return cost
+
+    mp_cost_a = get_mp_cost(prod_a_ct+prod_a_gs, C.UNITS_MP_PER_UNIT_A, 100) # Moyenne/Mix ? Non, on somme
+    # Plus précis: somme des deux marchés
+    mp_cost_a_total = get_mp_cost(prod_a_ct, C.UNITS_MP_PER_UNIT_A, decisions.produit_a_ct.qualite) + get_mp_cost(prod_a_gs, C.UNITS_MP_PER_UNIT_A, decisions.produit_a_gs.qualite)
+    mp_cost_b_total = get_mp_cost(prod_b_ct, C.UNITS_MP_PER_UNIT_B, decisions.produit_b_ct.qualite) + get_mp_cost(prod_b_gs, C.UNITS_MP_PER_UNIT_B, decisions.produit_b_gs.qualite)
+    mp_cost_c_total = get_mp_cost(prod_c_ct, C.UNITS_MP_PER_UNIT_C, decisions.produit_c_ct.qualite) + get_mp_cost(prod_c_gs, C.UNITS_MP_PER_UNIT_C, decisions.produit_c_gs.qualite)
+
+    # Allocation MO + Charges Machine (au prorata des heures machines ou équivalents)
+    # Poids relatif de production machine
+    weight_a = (total_prod_a) 
+    weight_b = (total_prod_b)
+    weight_c = (total_prod_c * 2) # C consomme 2x plus de capacité
+    total_weight = weight_a + weight_b + weight_c
+    
+    if total_weight > 0:
+        mo_amort_maint = (results.cout_main_oeuvre + results.cout_amortissement + results.cout_maintenance)
+        alloc_a = mo_amort_maint * (weight_a / total_weight)
+        alloc_b = mo_amort_maint * (weight_b / total_weight)
+        alloc_c = mo_amort_maint * (weight_c / total_weight)
+    else:
+        alloc_a = alloc_b = alloc_c = 0
+
+    results.cout_prod_a = mp_cost_a_total + alloc_a
+    results.cout_prod_b = mp_cost_b_total + alloc_b
+    results.cout_prod_c = mp_cost_c_total + alloc_c
+
+    # Marge sur Coût Variable / Direct (CA Potentiel - Coût Prod - Promo - Pub Spécifique)
+    # Note: Pub est globale par marché, on l'attribue au produit A B C selon le marché ? Non, pub CT/GS. 
+    # Pour simplifier "NET" par catégorie, on fait:
+    # Gain Potentiel (CA) - Coûts Spécifiques (Prod + Promo)
+    
+    # Coût Spécifique Commercial (Promo)
+    promo_a = decisions.produit_a_ct.promotion * prod_a_ct / 1000 + decisions.produit_a_gs.promotion * prod_a_gs / 1000
+    promo_b = decisions.produit_b_ct.promotion * prod_b_ct / 1000 + decisions.produit_b_gs.promotion * prod_b_gs / 1000
+    promo_c = decisions.produit_c_ct.promotion * prod_c_ct / 1000 + decisions.produit_c_gs.promotion * prod_c_gs / 1000
+    
+    # Emballage Recyclé par produit
+    cost_emb_a = (results.ca_potentiel_a_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_a_ct.emballage_recycle else 0) + \
+                 (results.ca_potentiel_a_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_a_gs.emballage_recycle else 0)
+    cost_emb_b = (results.ca_potentiel_b_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_b_ct.emballage_recycle else 0) + \
+                 (results.ca_potentiel_b_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_b_gs.emballage_recycle else 0)
+    cost_emb_c = (results.ca_potentiel_c_ct * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_c_ct.emballage_recycle else 0) + \
+                 (results.ca_potentiel_c_gs * C.RECYCLED_PACKAGING_ROYALTY_RATE if decisions.produit_c_gs.emballage_recycle else 0)
+
+    # CA Total par Produit
+    ca_a = results.ca_potentiel_a_ct + results.ca_potentiel_a_gs
+    # Ajout partiel CA contrat si on veut être puriste mais ca_potentiel contient les contrats dans l'onglet résultats ? 
+    # Attention: ca_potentiel_total contient déjà ca_contrats dans le calc précédent. 
+    # Mais ca_potentiel_a_ct calculé plus haut est `stock_dispo * prix`. Or stock dispo avait retiré les contrats.
+    # On doit rajouter la part contrats calculée précédemment pour avoir le VRAI CA total produit A.
+    
+    # Recalcul CA Contrat par produit pour l'analyse
+    ca_contrat_a = get_ca_contrat(decisions.produit_a_ct.ventes_contrat, state.stock_a_ct, prod_a_ct, decisions.produit_a_ct.achats_contrat, results.prix_net_a_ct) + \
+                   get_ca_contrat(decisions.produit_a_gs.ventes_contrat, state.stock_a_gs, prod_a_gs, decisions.produit_a_gs.achats_contrat, results.prix_net_a_gs)
+    ca_contrat_b = get_ca_contrat(decisions.produit_b_ct.ventes_contrat, state.stock_b_ct, prod_b_ct, decisions.produit_b_ct.achats_contrat, results.prix_net_b_ct) + \
+                   get_ca_contrat(decisions.produit_b_gs.ventes_contrat, state.stock_b_gs, prod_b_gs, decisions.produit_b_gs.achats_contrat, results.prix_net_b_gs)
+    ca_contrat_c = get_ca_contrat(decisions.produit_c_ct.ventes_contrat, state.stock_c_ct, prod_c_ct, decisions.produit_c_ct.achats_contrat, results.prix_net_c_ct) + \
+                   get_ca_contrat(decisions.produit_c_gs.ventes_contrat, state.stock_c_gs, prod_c_gs, decisions.produit_c_gs.achats_contrat, results.prix_net_c_gs)
+    
+    results.marge_sur_cout_variable_a = (ca_a + ca_contrat_a) - results.cout_prod_a - promo_a - cost_emb_a
+    results.marge_sur_cout_variable_b = (ca_a + ca_contrat_b) - results.cout_prod_b - promo_b - cost_emb_b # Erreur ici ca_a au lieu de ca_b à corriger
+    results.marge_sur_cout_variable_b = (results.ca_potentiel_b_ct + results.ca_potentiel_b_gs + ca_contrat_b) - results.cout_prod_b - promo_b - cost_emb_b
+    results.marge_sur_cout_variable_c = (results.ca_potentiel_c_ct + results.ca_potentiel_c_gs + ca_contrat_c) - results.cout_prod_c - promo_c - cost_emb_c
+
+    # Analyse Marketing
+    # Coût total (Pub + Vendeurs + Etudes)
+    results.cout_marketing_total_section = results.cout_publicite + results.cout_vendeurs + results.cout_etudes
 
     return results

@@ -1,7 +1,7 @@
 """Parser for Mirage simulation markdown files."""
 
 import re
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple, Any
 from .models import PeriodState
 
 
@@ -48,15 +48,15 @@ def parse_int(value: str) -> int:
     return int(parse_number(value))
 
 
-def parse_markdown_table(content: str, table_headers: List[str]) -> Dict[str, List[str]]:
+def parse_markdown_table(content: str, table_headers: List[str]) -> List[List[str]]:
     """
     Parse a markdown table by looking for one of the provided headers.
-    Returns dictionary {row_header: [values]}.
+    Returns a list of rows, where each row is a list of cell strings.
+    Unlike previous version, this does NOT return a dict to support duplicate keys and preserving order.
     """
     lines = content.split("\n")
     in_table = False
-    data = {}
-    found_columns = []
+    rows = []
 
     # Regex to recognize table separater lines like |---|---| or |:---|
     separator_pattern = re.compile(r"^\|?[\s\:\-\|]+\|?$")
@@ -79,16 +79,10 @@ def parse_markdown_table(content: str, table_headers: List[str]) -> Dict[str, Li
             if stripped_line.startswith("#") and not any(h.lower() in stripped_line.lower() for h in table_headers):
                 break
                 
-            # Stop if empty line? No, sometimes there are empty lines in markdown blocks
-            
             # Process table row
             if "|" in stripped_line:
-                # Remove leading/trailing pipes if they exist, but be careful with split
-                # | A | B | -> ['', ' A ', ' B ', '']
-                # A | B -> ['A ', ' B']
-                
+                # Remove leading/trailing pipes if they exist
                 parts = stripped_line.split("|")
-                # Remove first/last empty strings if the line starts/ends with pipe
                 if stripped_line.startswith("|"):
                     parts = parts[1:]
                 if stripped_line.endswith("|"):
@@ -100,18 +94,12 @@ def parse_markdown_table(content: str, table_headers: List[str]) -> Dict[str, Li
                 is_separator = separator_pattern.match(stripped_line) or all(c == "" or set(c) <= set("-: ") for c in cells)
                 if is_separator:
                     continue
-                    
-                # Store columns if this is the header row (first non-empty, non-separator row)
-                if not found_columns:
-                    found_columns = cells
-                else:
-                    # Data row
-                    if len(cells) >= 2:
-                        key = cells[0]
-                        values = cells[1:]
-                        data[key] = values
+                
+                # Add row if it has content
+                if any(cells):
+                    rows.append(cells)
 
-    return data
+    return rows
 
 
 def parse_mirage_markdown(content: str) -> dict:
@@ -133,8 +121,6 @@ def parse_mirage_markdown(content: str) -> dict:
     # Raw Materials
     result["raw_materials"] = parse_markdown_table(content, ["Raw Materials", "Mat. Premières", "Matières Premières"])
     
-    # Add other sections if needed
-    
     return result
 
 
@@ -143,12 +129,16 @@ def extract_period_state(parsed_data: dict) -> PeriodState:
     state = PeriodState()
 
     # 1. Stocks
-    stocks = parsed_data.get("stocks", {})
+    stocks_rows = parsed_data.get("stocks", [])
     # Look for the row containing "Stock Final"
-    for key, values in stocks.items():
-        k = key.lower()
+    for row in stocks_rows:
+        if not row: continue
+        k = row[0].lower()
         if "stock final" in k or "final stock" in k:
-            # Usually A-CT, B-CT, C-CT, A-GS, B-GS, C-GS
+            # Row structure: [Label, A-CT, B-CT, C-CT, A-GS, B-GS, C-GS, Total]
+            # Need to handle potential extra empty column at start if split poorly, but clean_markdown_cell handles it usually.
+            # Usually: ['Stock Final (U)', '427 040', '0', '0', '0', '434 681', '0', '861 721']
+            values = row[1:]
             if len(values) >= 6:
                 state.stock_a_ct = parse_int(values[0])
                 state.stock_b_ct = parse_int(values[1])
@@ -158,82 +148,105 @@ def extract_period_state(parsed_data: dict) -> PeriodState:
                 state.stock_c_gs = parse_int(values[5])
 
     # 2. Raw Materials
-    raw = parsed_data.get("raw_materials", {})
-    for key, values in raw.items():
-        k = key.lower()
+    raw_rows = parsed_data.get("raw_materials", [])
+    # Format: | Stock Final | N (Unit) | S (Unit) | ... |
+    # Rows might be: ['Stock Final', '4 559 090', '3 707 500', '3 662', '2 622']
+    for row in raw_rows:
+        if not row: continue
+        k = row[0].lower()
         if "stock final" in k or "final inventory" in k:
+            values = row[1:]
             if len(values) >= 2:
                 state.stock_mp_n = parse_int(values[0])
                 state.stock_mp_s = parse_int(values[1])
 
     # 3. General Info (Workers, Machines, Indices)
-    general = parsed_data.get("general_info", {})
-    for key, values in general.items():
-        k = key.lower()
-        val = values[0] if values else "0"
+    general_rows = parsed_data.get("general_info", [])
+    
+    # Handle duplicate "Avec" keys by keeping track of context (M1 vs M2)
+    # The file has:
+    # | Cap.Theor.Max./M1... | ... |
+    # | Avec | 17 | ... |
+    # | Cap.Theor.Max./M2... | ... |
+    # | Avec | 0 | ... |
+    
+    last_context = "" # "m1" or "m2"
+    
+    for row in general_rows:
+        if not row: continue
+        if len(row) < 2: continue
+        
+        k = row[0].lower()
+        v = row[1]
         
         if "nombre ouvriers" in k or "number of workers" in k:
-            state.nb_ouvriers = parse_int(val)
+            state.nb_ouvriers = parse_int(v)
         
         if "indice général des prix" in k or "price general index" in k:
-            state.indice_prix = parse_number(val)
+            state.indice_prix = parse_number(v)
             
         if "indice salarial" in k or "wage index" in k:
-            state.indice_salaire = parse_number(val)
+            state.indice_salaire = parse_number(v)
+
+        # Machine Context detection
+        if "m1" in k:
+            last_context = "m1"
+        elif "m2" in k:
+            last_context = "m2"
             
-        # Machines logic can be tricky: 
-        # "Avec 17 Chaines en activité" -> Key might be "Avec", Value "17" if split improperly
-        # Or Key "Avec 17 Chaines en activité", Value "..."
-        # In the provided markdown: |Avec|17|Chaines en activité|...|
-        # or |Cap.Theor...|...|
-        
-        # Let's try to find machine count in key or value
-        if "chaines en activité" in k or "chains operating" in k:
-            # If the number is in the value column
-            v_num = parse_int(val)
-            if v_num > 0:
-                state.nb_machines_m1 = v_num
+        if "avec" == k.strip() or "chaines en activité" in row[2].lower() if len(row)>2 else False:
+            val = parse_int(v)
+            if last_context == "m1":
+                state.nb_machines_m1 = val
+            elif last_context == "m2":
+                state.nb_machines_m2 = val
             else:
-                # If the number is in the key string itself "Avec 17 chaines..."
-                match = re.search(r"(\d+)", k)
-                if match:
-                    state.nb_machines_m1 = int(match.group(1))
-                    
-        # Alternative parsing for the weird "Avec | 17 | ..." format
-        if k == "avec" and values:
-             # Check next column for context?
-             # Since we only get key -> values, we check if values has the number
-             state.nb_machines_m1 = parse_int(values[0])
+                # Fallback if context not found (e.g. first "Avec" is usually M1)
+                if state.nb_machines_m1 == 15: # Default
+                    state.nb_machines_m1 = val
+                else:
+                    state.nb_machines_m2 = val
 
     # 4. Balance Sheet (Cash, Debt)
-    balance = parsed_data.get("balance_sheet", {})
-    # Default found flags
+    # The Bilan table is 2 columns!
+    # | ACTIF | Val | PASSIF | Val |
+    balance_rows = parsed_data.get("balance_sheet", [])
     found_cash = False
     
-    for key, values in balance.items():
-        k = key.lower()
-        val = values[0] if values else "0"
+    for row in balance_rows:
+        if not row: continue
         
-        # Cash
-        if ("disponibilités" in k or "cash" in k) and "net" not in k and not found_cash:
-            c = parse_number(val)
-            if c != 0:
+        # Strategy: Search entire row for keywords
+        # Because "Emprunt" is on the right side (indices 2 and 3 usually)
+        
+        for i, cell in enumerate(row):
+            c_lower = cell.lower()
+            
+            # Check for value at i+1
+            if i + 1 >= len(row): break
+            
+            val_str = row[i+1]
+            
+            # Cash
+            if ("disponibilités" in c_lower or "cash" in c_lower) and "net" not in c_lower and not found_cash:
+                c = parse_number(val_str)
+                # Ensure we don't pick up something else
                 state.cash = c
                 found_cash = True
                 
-        # Overdraft (French 'Découvert')
-        if "découvert" in k:
-            ov = parse_number(val)
-            if ov > 0:
-                state.cash = -ov
-                found_cash = True
-                
-        # Debt
-        if "emprunt long terme" in k or "long term debt" in k:
-            state.dette_lt = parse_number(val)
+            # Overdraft (French 'Découvert')
+            if "découvert" in c_lower:
+                ov = parse_number(val_str)
+                if ov > 0:
+                    state.cash = -ov
+                    found_cash = True
             
-        if "emprunt court terme" in k or "short term debt" in k:
-             state.dette_ct = parse_number(val)
+            # Debt
+            if "emprunt long terme" in c_lower or "long term debt" in c_lower:
+                state.dette_lt = parse_number(val_str)
+                
+            if "emprunt court terme" in c_lower or "short term debt" in c_lower:
+                state.dette_ct = parse_number(val_str)
 
     return state
 
