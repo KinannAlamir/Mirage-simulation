@@ -102,6 +102,36 @@ def sync_widgets_with_state(state: PeriodState):
     st.session_state.s_ip = float(state.indice_prix) if state.indice_prix is not None else 0.0
     st.session_state.s_is = float(state.indice_salaire) if state.indice_salaire is not None else 0.0
 
+def update_indices_from_period():
+    """Recalcule les indices Prix et Salaire basés sur la période sélectionnée (Base 100 en P-3)."""
+    if "period_selector_val" not in st.session_state:
+        return
+        
+    p = st.session_state.period_selector_val
+    
+    # Base P-3 values (selon les valeurs par défaut)
+    base_ip = 107.12
+    base_is = 103.0
+    
+    # Offset = Period - (-3) => si p = -3, offset = 0
+    offset = p + 3
+    if offset < 0: offset = 0
+    
+    # IGP: +2.4% / quarter
+    # Wages: +3.1% / quarter
+    new_ip = base_ip * (1.024 ** offset)
+    new_is = base_is * (1.031 ** offset)
+    
+    st.session_state.s_ip = float(round(new_ip, 2))
+    st.session_state.s_is = float(round(new_is, 2))
+    
+    if "state" in st.session_state:
+        st.session_state.state.period_num = p
+        st.session_state.state.indice_prix = new_ip
+        st.session_state.state.indice_salaire = new_is
+        
+    st.toast(f"📅 Période {p} : Indices mis à jour (IP={new_ip:.1f}, IS={new_is:.1f})", icon="📈")
+
 # Page config
 st.set_page_config(
     page_title="Mirage - Aide à la Décision",
@@ -112,6 +142,75 @@ st.set_page_config(
 
 # Sidebar: Documentation des règles
 with st.sidebar:
+    st.header("💾 Sauvegarde / Chargement")
+    
+    # Save/Load logic
+    col_save, col_load = st.columns(2)
+    
+    with col_save:
+        # Pousser le dictionnaire de session_state actuel vers JSON
+        # On convertit en dict d'abord pour passer à la fonction
+        json_state = serialize_simulation_state(dict(st.session_state))
+        st.download_button(
+            label="💾 Sauvegarder",
+            data=json_state,
+            file_name="mirage_session.json",
+            mime="application/json",
+            help="Télécharger le fichier de sauvegarde de votre session actuelle"
+        )
+        
+    # Charger
+    uploaded_session = st.file_uploader("Charger une session (.json)", type=["json"], label_visibility="collapsed")
+    
+    if uploaded_session is not None:
+        try:
+            content = uploaded_session.read().decode("utf-8")
+            loaded_state = deserialize_simulation_state(content)
+            
+            if loaded_state:
+                # Update session state with loaded values
+                EXCLUDED_LOAD_KEYS = {"reset_btn", "auto_app_n", "auto_app_s"}
+                for k, v in loaded_state.items():
+                    if k in EXCLUDED_LOAD_KEYS: continue
+                    st.session_state[k] = v
+                
+                st.success("✅ Session chargée avec succès!")
+                # On rerun pour rafraîchir les widgets avec les nouvelles valeurs
+                if st.button("🔄 Appliquer le chargement", type="primary"):
+                    st.rerun()
+            else:
+                st.warning("Le fichier semble vide ou invalide.")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement: {e}")
+
+    st.markdown("---")
+    
+    # Save / Load Defaults
+    col_save1, col_save2 = st.columns(2)
+    with col_save1:
+        if st.button("💾 Sauver Défaut", use_container_width=True, help="Sauvegarder les valeurs actuelles comme personnalisées"):
+            save_state_to_file()
+    with col_save2:
+        if st.button("📂 Charger Défaut", use_container_width=True, help="Charger les valeurs personnalisées sauvegardées"):
+            load_state_from_file() # Actually this function sets st.session_state, which is fine IF it reruns. And load_state_from_file has rerun().
+
+    st.markdown("---")
+
+    st.header("⚙️ Paramètres de Simulation")
+    # Période de -3 à 8 (Base 0 = lancement, -3 = historique)
+    period_opts = list(range(-3, 9))
+    # Default index = 4 corresponds to value 1 in [-3, -2, -1, 0, 1]
+    default_idx = 4 
+    
+    st.selectbox(
+        "📅 Période Actuelle", 
+        options=period_opts, 
+        index=default_idx, 
+        key="period_selector_val",
+        on_change=update_indices_from_period,
+        help="Sélectionnez la période. Les indices de prix et salaires seront recalculés automatiquement (Base 100 en P-3)."
+    )
+    
     with st.expander("ℹ️ Règles de Gestion Actives"):
         st.markdown("""
         **1. Contrats & Stock**
@@ -175,49 +274,7 @@ if "state" not in st.session_state:
 # SIDEBAR - État initial de la période
 # =====================================================
 with st.sidebar:
-    st.header("� Sauvegarde / Chargement")
-    
-    # Save/Load logic
-    col_save, col_load = st.columns(2)
-    
-    with col_save:
-        # Pousser le dictionnaire de session_state actuel vers JSON
-        # On convertit en dict d'abord pour passer à la fonction
-        json_state = serialize_simulation_state(dict(st.session_state))
-        st.download_button(
-            label="💾 Sauvegarder",
-            data=json_state,
-            file_name="mirage_session.json",
-            mime="application/json",
-            help="Télécharger le fichier de sauvegarde de votre session actuelle"
-        )
-        
-    # Charger
-    uploaded_session = st.file_uploader("Charger une session (.json)", type=["json"], label_visibility="collapsed")
-    
-    if uploaded_session is not None:
-        try:
-            content = uploaded_session.read().decode("utf-8")
-            loaded_state = deserialize_simulation_state(content)
-            
-            if loaded_state:
-                # Update session state with loaded values
-                EXCLUDED_LOAD_KEYS = {"reset_btn", "auto_app_n", "auto_app_s"}
-                for k, v in loaded_state.items():
-                    if k in EXCLUDED_LOAD_KEYS: continue
-                    st.session_state[k] = v
-                
-                st.success("✅ Session chargée avec succès!")
-                # On rerun pour rafraîchir les widgets avec les nouvelles valeurs
-                if st.button("🔄 Appliquer le chargement", type="primary"):
-                    st.rerun()
-            else:
-                st.warning("Le fichier semble vide ou invalide.")
-        except Exception as e:
-            st.error(f"Erreur lors du chargement: {e}")
-
-    st.markdown("---")
-    st.header("�📊 État Initial")
+    st.header("📊 État Initial")
 
     # Import options
     st.subheader("📁 Importer des données")
@@ -300,15 +357,6 @@ with st.sidebar:
             sync_widgets_with_state(p2_state)
             st.success("Valeurs P.-2 chargées!")
             st.rerun()
-
-    # Save / Load Defaults
-    col_save1, col_save2 = st.columns(2)
-    with col_save1:
-        if st.button("💾 Sauver Défaut", use_container_width=True, help="Sauvegarder les valeurs actuelles comme personnalisées"):
-            save_state_to_file()
-    with col_save2:
-        if st.button("📂 Charger Défaut", use_container_width=True, help="Charger les valeurs personnalisées sauvegardées"):
-            load_state_from_file()
 
     st.markdown("---")
 
@@ -408,12 +456,8 @@ tabs = st.tabs(["📝 Saisie des Décisions", "📊 Résultats & Analyse"])
 # TAB 1: SAISIE DES DÉCISIONS (Table Unique)
 # =====================================================
 with tabs[0]:
-    # Create info expander in sidebar
-    # We use a unique key to store it in session state
-    with st.sidebar:
-        st.header("⚙️ Paramètres Période")
-        st.selectbox("Période Simulée", options=[1, 2, 3, 4], index=0, help="Détermine le taux de congés payés (3.5%, 4%, 21%...)", key="period_selector_val")
-        
+    # Selecteur de période déplacé en haut
+    
     st.header("Tableau de Bord des Décisions")
     
     # Button to reset all products to zero
@@ -513,7 +557,6 @@ with tabs[0]:
         c_gs_a_contrat = decision_row("Achats Contrat (U)", "number", min_value=0, value=0, step=100, key="c_gs_ac")
     
     net_c_container = st.empty()
-
     st.markdown("---")
 
     # --- MARKETING ---
@@ -527,15 +570,11 @@ with tabs[0]:
             st.session_state[key] = st.session_state[key].upper()
 
     mkt_etudes_abcd = decision_row("073- Etudes Codées (A..D) ou N", "text", value="ABC", key="mkt_etu_ad", on_change=force_upper, args=("mkt_etu_ad",))
-    # Pas besoin de post-process manuel car le callback modifie le state, mais decision_row retourne la valeur courante.
-    # Au prochain rerun ce sera à jour. Pour l'affichage instantané, on fait confiance au retour.
     
     mkt_etudes_efgh = decision_row("074- Etudes Codées (E..H) ou N", "text", value="N", key="mkt_etu_eh", on_change=force_upper, args=("mkt_etu_eh",))
 
     mkt_vendeurs_gs = decision_row("075- Nombre Vendeurs G.S.", "number", min_value=0, value=12, step=1, key="mkt_ven_gs")
     mkt_prime_gs = decision_row("076- Prime Trimest. (€/Vendeur)", "number", min_value=0.0, value=600.0, step=50.0, key="mkt_prime_gs")
-    
-    # Note: 077 seems missing in original code's sequence or was skipped
     
     mkt_pub_ct = decision_row("078- Publicité C.T. (K€)", "number", min_value=0.0, value=400.0, step=50.0, key="mkt_pub_ct")
     mkt_pub_gs = decision_row("079- Publicité G.S. (K€)", "number", min_value=0.0, value=0.0, step=50.0, key="mkt_pub_gs")
@@ -877,19 +916,18 @@ with tabs[0]:
     with col_prev1:
         st.metric("CA Potentiel Total", f"{sim_results.ca_potentiel_total:,.0f} K€", help="Chiffre d'Affaires si tout le stock disponible est vendu")
     with col_prev2:
-        # Estimation Résultat simple
-        # Marge = CA - Coûts Prod - Coûts Commerciaux - Etudes - Finances - Embauche + Variation Stock
-        marge_estimee = (sim_results.ca_potentiel_total 
-                         - sim_results.cout_production_total 
-                         - sim_results.cout_commercial_total 
-                         - sim_results.cout_etudes 
-                         - sim_results.cout_finance_total_section 
-                         - sim_results.cout_embauche
-                         - sim_results.cout_structure_admin
-                         - sim_results.cout_frais_deplacement
-                         + sim_results.valeur_variation_stocks)
-                         
-        st.metric("Résultat Opérationnel Est.", f"{marge_estimee:,.0f} K€", help="Inclus Variation de Stocks (Production stockée ou déstockage valorisé au coût de production)")
+        # Estimation Résultat
+        res_imposable = sim_results.resultat_courant + sim_results.resultat_exceptionnel
+        impot = getattr(sim_results, "impot_societes", 0.0)
+        res_net = getattr(sim_results, "resultat_net", res_imposable - impot)
+        
+        st.metric("Résultat Avant Impôt", f"{res_imposable:,.0f} K€", help="Résultat Courant + Exceptionnel")
+        
+        # Affichage distinct de l'IS si pertinent
+        if impot > 0:
+            st.caption(f"Dont Impôt Sociétés : {impot:,.0f} K€")
+            
+        st.metric("Résultat Net Est.", f"{res_net:,.0f} K€", delta_color="normal" if res_net >= 0 else "inverse")
     with col_prev3:
         delta_color = "normal" if sim_results.tresorerie_estimee >= 0 else "inverse"
         st.metric("Trésorerie Fin Période", f"{sim_results.tresorerie_estimee:,.0f} K€", delta_color=delta_color)

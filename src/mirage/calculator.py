@@ -228,9 +228,17 @@ def calculate_all(decisions: AllDecisions, state: PeriodState, forecast_sales: d
     # =========================================================================
     # 5. COÛTS DE PRODUCTION
     # =========================================================================
+    # PARAMÈTRES ÉCONOMIQUES (Indices)
+    # =========================================================================
+    # Calcul des ratios (Base 100) pour indexation coût MP et Frais
+    indice_salaire_ratio = state.indice_salaire / 100.0
+    indice_prix_ratio = state.indice_prix / 100.0
+
+    # =========================================================================
     # Coût MP
-    prix_mp_n = 0.80
-    prix_mp_s = 0.70
+    # Prix de base MP (Indexés sur IGP)
+    prix_mp_n = 0.80 * indice_prix_ratio
+    prix_mp_s = 0.70 * indice_prix_ratio
     
     # --- Calcul détaillé Achats vs Conso MP ---
     
@@ -256,8 +264,19 @@ def calculate_all(decisions: AllDecisions, state: PeriodState, forecast_sales: d
     results.cout_mp = (results.mp_n_necessaire * prix_mp_n + results.mp_s_necessaire * prix_mp_s) / 1000  # K€ (Standard)
     
     # Paramètres de base (Indexation) - Définis tôt pour usage dans calculs variables (Energie, etc)
-    indice_salaire_ratio = state.indice_salaire / 100.0
-    indice_prix_ratio = state.indice_prix / 100.0
+    # IGP augmente de 2.4% par trimestre en moyenne
+    # Salaires augmentent de 3.1% par trimestre en moyenne
+    
+    # On calcule le ratio d'inflation par rapport à la base 100
+    # Si state.indice_prix est fourni par l'utilisateur, on l'utilise
+    # Sinon on applique une augmentation théorique si period_num > 0
+    
+    # Correction : L'indice est un input de "state". Si l'utilisateur saisit 107.12, c'est ce qu'on utilise.
+    # Les augmentations "futures" (prévisionnelles) doivent être gérées dans l'interface de saisie (sidebar) 
+    # pour que l'utilisateur puisse tester ses propres hypothèses d'inflation.
+    # Ici, le calculateur prend l'indice tel quel.
+    # (Ratios calculés plus haut)
+
 
     # --- Energie, Sous-traitance, Variables divers (Production) ---
     total_prod_units = total_prod_a + total_prod_b + total_prod_c

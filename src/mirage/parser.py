@@ -187,7 +187,7 @@ def extract_period_state(parsed_data: dict) -> PeriodState:
             
         if "indice salarial" in k or "wage index" in k:
             state.indice_salaire = parse_number(v)
-
+            
         # Machine Context detection
         if "m1" in k:
             last_context = "m1"

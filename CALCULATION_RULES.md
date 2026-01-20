@@ -52,6 +52,7 @@ La variation de stock valorisée augmente (stockage) ou diminue (déstockage) le
 
 ### B. Charges Externes Variables & Autres
 Ces charges sont calculées directement ou indexées sur l'IGP (Indice Global des Prix).
+*Note : L'IGP augmente en moyenne de 2.4% par trimestre. L'indice des salaires augmente plus vite, environ 3.1% par trimestre.*
 *Code : `src/mirage/calculator.py` - Sections 5, 6 et 8*
 
 | Rubrique | Formule Exacte (Code) | Valeur Unitaire (Base P-3) |
