@@ -10,7 +10,13 @@ def serialize_simulation_state(session_state_dict: Dict[str, Any]) -> str:
     """
     export_data = {}
     
+    # Keys to definitely exclude from export (buttons, session triggers)
+    EXCLUDED_KEYS = {"reset_btn", "auto_app_n", "auto_app_s", "FormSubmitter"}
+
     for key, value in session_state_dict.items():
+        if key in EXCLUDED_KEYS:
+            continue
+            
         # Handle the main PeriodState object
         if key == "state" and isinstance(value, PeriodState):
             state_dict = dataclasses.asdict(value)

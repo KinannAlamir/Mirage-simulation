@@ -42,6 +42,10 @@ class ApprovisionnementDecision:
     duree_contrat_s: int = 0  # 1 à 4 périodes
     maintenance: bool = True
 
+    # Nouveaux champs pour ajouts manuels (Spot/Urgence)
+    achat_spot_n: int = 0  # KU
+    achat_spot_s: int = 0  # KU
+
 
 @dataclass
 class ProductionDecision:
@@ -50,6 +54,7 @@ class ProductionDecision:
     machines_m1_actives: int = 15
     machines_m2_actives: int = 0
     ventes_m1: int = 0
+    ventes_m2: int = 0  # Ajout pour ventes de machines M2
     achats_m1: int = 0
     achats_m2: int = 0
     emb_deb_ouvriers: int = 0
@@ -123,6 +128,7 @@ class PeriodState:
     dette_ct: float = 0.0
     reserves: float = 0.0  # Réserves accumulées
     resultat_n_1: float = 0.0  # Résultat net de l'année N-1 (ou période précédente)
+    report_a_nouveau: float = 0.0  # Report à nouveau (Déficits reportables)
 
     # Indices
     indice_prix: float = 100.0
@@ -172,6 +178,9 @@ class CalculatedResults:
 
     # Coûts études
     cout_etudes: float = 0.0
+
+    # Coûts Exceptionnels / Autres
+    cout_impayes: float = 0.0
 
     # Revenus estimés (si tout vendu)
     ca_contrats: float = 0.0
@@ -226,6 +235,53 @@ class CalculatedResults:
     marge_sur_cout_variable_c: float = 0.0
 
     cout_marketing_total_section: float = 0.0
+    cout_appro_total_section: float = 0.0
+    cout_rse_total_section: float = 0.0
+    cout_finance_total_section: float = 0.0
+
+    # Coûts Financiers Spécifiques
+    cout_escompte: float = 0.0
+    cout_interets: float = 0.0
+    
+    # Nouveaux Coûts
+    cout_embauche: float = 0.0 # Frais de recrutement
+    valeur_variation_stocks: float = 0.0 # Variation de la valeur des stocks (Prod - Ventes)
+
+    # Coûts de Structure & Frais
+    cout_structure_admin: float = 0.0 # Salaires Admin + Direction
+    cout_frais_deplacement: float = 0.0 # Frais de mission / déplacement total
+
+    # --- NOUVEAUX CHAMPS P&L COMPTABLE ---
+    # Production
+    cout_energie: float = 0.0
+    cout_sous_traitance: float = 0.0
+    cout_variable_fab: float = 0.0
+    
+    # Commercial
+    cout_transport: float = 0.0
+    
+    # Admin / Généraux
+    cout_energie_generale: float = 0.0
+    cout_frais_gestion: float = 0.0
+    cout_impots_taxes: float = 0.0
+    amortissement_admin: float = 0.0
+    
+    # Financier
+    cout_agios: float = 0.0
+    cout_interets_decouvert: float = 0.0
+    
+    # Exceptionnel
+    frais_emission_actions: float = 0.0
+    vnc_cessions: float = 0.0 # Valeur Nette Comptable des éléments cédés
+    
+    # Résultats Intermédiaires
+    resultat_exploitation: float = 0.0
+    resultat_financier: float = 0.0
+    resultat_courant: float = 0.0
+    resultat_exceptionnel: float = 0.0
+    resultat_avant_impot: float = 0.0
+    impot_societes: float = 0.0
+    resultat_net: float = 0.0
 
 
 @dataclass

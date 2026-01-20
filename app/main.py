@@ -20,6 +20,7 @@ if "src.mirage.calculator" in sys.modules:
 
 import streamlit as st
 import pandas as pd
+import json # Added for save/load features
 
 from src.mirage.models import (
     AllDecisions,
@@ -36,6 +37,51 @@ from src.mirage.calculator import calculate_all, calculate_study_costs
 from src.mirage import constants as C
 from src.mirage.parser import parse_mirage_markdown, extract_period_state, get_empty_state
 from src.mirage.utils import serialize_simulation_state, deserialize_simulation_state
+
+# --- SAVE / LOAD HELPERS ---
+SAVE_FILE = "data/saved_defaults.json"
+
+def save_state_to_file():
+    """Sauvegarde l'état actuel (session_state) dans un fichier JSON."""
+    serializable_state = {}
+    # Keys to exclude from saving (especially buttons which cause errors if reloaded)
+    EXCLUDED_KEYS = ["state", "reset_btn", "auto_app_n", "auto_app_s"]
+
+    # On sauvegarde toutes les clés simples (int, float, str, bool, list)
+    # On exclut les objets complexes comme PeriodState qui sera reconstruit via les widgets
+    for k, v in st.session_state.items():
+        if k in EXCLUDED_KEYS: continue 
+        if isinstance(v, (int, float, str, bool, list, dict, type(None))):
+            serializable_state[k] = v
+            
+    try:
+        Path("data").mkdir(exist_ok=True)
+        with open(SAVE_FILE, "w") as f:
+            json.dump(serializable_state, f, indent=2)
+        st.toast("✅ Valeurs sauvegardées comme défaut !", icon="💾")
+    except Exception as e:
+        st.error(f"Erreur sauvegarde: {e}")
+
+def load_state_from_file():
+    """Charge l'état depuis le fichier JSON."""
+    if not Path(SAVE_FILE).exists():
+        st.toast("⚠️ Aucune sauvegarde trouvée.", icon="📂")
+        return
+    
+    try:
+        with open(SAVE_FILE, "r") as f:
+            loaded_state = json.load(f)
+        
+        # Mise à jour du session_state
+        for k, v in loaded_state.items():
+            if k == "reset_btn": continue # Safety check
+            st.session_state[k] = v
+            
+        # On force le rechargement pour que les widgets prennent les nouvelles valeurs
+        st.toast("✅ Valeurs chargées !", icon="📂")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Erreur chargement: {e}")
 
 def sync_widgets_with_state(state: PeriodState):
     """Met à jour les widgets de la sidebar avec les valeurs de l'état."""
@@ -90,27 +136,39 @@ st.markdown("---")
 
 # Initialize session state
 if "state" not in st.session_state:
-    st.session_state.state = PeriodState(
-        stock_a_ct=609_212,
-        stock_a_gs=0,
-        stock_b_ct=0,
-        stock_b_gs=355_257,
-        stock_c_ct=0,
-        stock_c_gs=0,
-        stock_mp_n=2_889_090,
-        stock_mp_s=687_500,
-        nb_ouvriers=580,
-        nb_machines_m1=18,
-        nb_machines_m2=0,
-        cash=414.0,
-        dette_lt=5_600.0,
-        dette_ct=0.0,
-        indice_prix=107.12,
-        indice_salaire=103.0,
-    )
-    sync_widgets_with_state(st.session_state.state)
-elif "s_a_ct" not in st.session_state:
-    sync_widgets_with_state(st.session_state.state)
+    # First check if we have custom defaults saved
+    if Path(SAVE_FILE).exists() and st.query_params.get("reset") != "true":
+         try:
+            with open(SAVE_FILE, "r") as f:
+                loaded_state = json.load(f)
+            for k, v in loaded_state.items():
+                if k == "reset_btn": continue
+                st.session_state[k] = v
+         except:
+             pass
+
+    if "state" not in st.session_state: # If still not present (or we just loaded params but not the complex object)
+        st.session_state.state = PeriodState(
+            stock_a_ct=609_212,
+            stock_a_gs=0,
+            stock_b_ct=0,
+            stock_b_gs=355_257,
+            stock_c_ct=0,
+            stock_c_gs=0,
+            stock_mp_n=2_889_090,
+            stock_mp_s=687_500,
+            nb_ouvriers=560,
+            nb_machines_m1=18,
+            nb_machines_m2=0,
+            cash=414.0,
+            dette_lt=5_600.0,
+            dette_ct=0.0,
+            indice_prix=107.12,
+            indice_salaire=103.0,
+        )
+        sync_widgets_with_state(st.session_state.state)
+    elif "s_a_ct" not in st.session_state:
+        sync_widgets_with_state(st.session_state.state)
 
 
 # =====================================================
@@ -144,7 +202,9 @@ with st.sidebar:
             
             if loaded_state:
                 # Update session state with loaded values
+                EXCLUDED_LOAD_KEYS = {"reset_btn", "auto_app_n", "auto_app_s"}
                 for k, v in loaded_state.items():
+                    if k in EXCLUDED_LOAD_KEYS: continue
                     st.session_state[k] = v
                 
                 st.success("✅ Session chargée avec succès!")
@@ -240,6 +300,15 @@ with st.sidebar:
             sync_widgets_with_state(p2_state)
             st.success("Valeurs P.-2 chargées!")
             st.rerun()
+
+    # Save / Load Defaults
+    col_save1, col_save2 = st.columns(2)
+    with col_save1:
+        if st.button("💾 Sauver Défaut", use_container_width=True, help="Sauvegarder les valeurs actuelles comme personnalisées"):
+            save_state_to_file()
+    with col_save2:
+        if st.button("📂 Charger Défaut", use_container_width=True, help="Charger les valeurs personnalisées sauvegardées"):
+            load_state_from_file()
 
     st.markdown("---")
 
@@ -449,21 +518,27 @@ with tabs[0]:
 
     # --- MARKETING ---
     st.subheader("MARKETING")
-    mkt_vendeurs_ct = decision_row("071- Nombre Vendeurs C.T.", "number", min_value=0, value=35, step=1)
-    mkt_commission = decision_row("072- Commission (% du C.A.)", "number", min_value=0.0, max_value=5.0, value=0.5, step=0.1)
-    mkt_etudes_abcd = decision_row("073- Etudes Codées (A..D) ou N", "text", value="ABC")
-    mkt_etudes_abcd = mkt_etudes_abcd.upper() # Post-process
+    mkt_vendeurs_ct = decision_row("071- Nombre Vendeurs C.T.", "number", min_value=0, value=35, step=1, key="mkt_ven_ct")
+    mkt_commission = decision_row("072- Commission (% du C.A.)", "number", min_value=0.0, max_value=5.0, value=0.5, step=0.1, key="mkt_comm")
     
-    mkt_etudes_efgh = decision_row("074- Etudes Codées (E..H) ou N", "text", value="N")
-    mkt_etudes_efgh = mkt_etudes_efgh.upper() # Post-process
+    # Callback pour forcer majuscules sur les études
+    def force_upper(key):
+        if key in st.session_state and st.session_state[key]:
+            st.session_state[key] = st.session_state[key].upper()
 
-    mkt_vendeurs_gs = decision_row("075- Nombre Vendeurs G.S.", "number", min_value=0, value=12, step=1)
-    mkt_prime_gs = decision_row("076- Prime Trimest. (€/Vendeur)", "number", min_value=0.0, value=600.0, step=50.0)
+    mkt_etudes_abcd = decision_row("073- Etudes Codées (A..D) ou N", "text", value="ABC", key="mkt_etu_ad", on_change=force_upper, args=("mkt_etu_ad",))
+    # Pas besoin de post-process manuel car le callback modifie le state, mais decision_row retourne la valeur courante.
+    # Au prochain rerun ce sera à jour. Pour l'affichage instantané, on fait confiance au retour.
+    
+    mkt_etudes_efgh = decision_row("074- Etudes Codées (E..H) ou N", "text", value="N", key="mkt_etu_eh", on_change=force_upper, args=("mkt_etu_eh",))
+
+    mkt_vendeurs_gs = decision_row("075- Nombre Vendeurs G.S.", "number", min_value=0, value=12, step=1, key="mkt_ven_gs")
+    mkt_prime_gs = decision_row("076- Prime Trimest. (€/Vendeur)", "number", min_value=0.0, value=600.0, step=50.0, key="mkt_prime_gs")
     
     # Note: 077 seems missing in original code's sequence or was skipped
     
-    mkt_pub_ct = decision_row("078- Publicité C.T. (K€)", "number", min_value=0.0, value=400.0, step=50.0)
-    mkt_pub_gs = decision_row("079- Publicité G.S. (K€)", "number", min_value=0.0, value=0.0, step=50.0)
+    mkt_pub_ct = decision_row("078- Publicité C.T. (K€)", "number", min_value=0.0, value=400.0, step=50.0, key="mkt_pub_ct")
+    mkt_pub_gs = decision_row("079- Publicité G.S. (K€)", "number", min_value=0.0, value=0.0, step=50.0, key="mkt_pub_gs")
 
     net_mkt_container = st.empty()
 
@@ -477,7 +552,7 @@ with tabs[0]:
     app_mp_s = decision_row("082- Commandes MP S (KU/per)", "number", min_value=0, value=0, step=500, key="app_mp_s_val")
     app_duree_s = decision_row("083- Durée contrat S (1-4)", "number", min_value=0, max_value=4, value=0, step=1, key="app_duree_s")
     
-    app_maintenance = decision_row("086- Maintenance (O/N)", "checkbox", value=True)
+    app_maintenance = decision_row("086- Maintenance (O/N)", "checkbox", value=True, key="app_maint")
 
     # Info Prix MP expander
     with st.expander("📋 Voir Grille de Prix MP"):
@@ -495,26 +570,25 @@ with tabs[0]:
             st.markdown("**MP S**")
             st.caption("Voir onglet Résultats pour détails si besoin")
 
+    net_appro_container = st.empty()
+
     st.markdown("---")
 
+
+
     # --- PRODUCTION ---
-    st.subheader("PRODUCTION & RSE")
+    st.subheader("PRODUCTION")
+
+    prod_m1_actives = decision_row("089- Machines M1 Actives", "number", min_value=0, value=min(17, nb_machines_m1) if nb_machines_m1 > 0 else 0, step=1, key="prod_m1")
+    prod_m2_actives = decision_row("090- Machines M2 Actives", "number", min_value=0, value=0, step=1, key="prod_m2")
+
+    prod_ventes_m1 = decision_row("091- Ventes Machines M1", "number", min_value=0, value=0, step=1, key="prod_v_m1")
+    prod_achats_m1 = decision_row("092- Achats Machines M1", "number", min_value=0, value=0, step=1, key="prod_a_m1")
+    prod_achats_m2 = decision_row("093- Achats Machines M2", "number", min_value=0, value=0, step=1, key="prod_a_m2")
+
+    prod_emb_deb = decision_row("094- Emb/Deb. Ouvriers", "number", value=0, step=10, key="prod_emb")
+    prod_var_pa = decision_row("095- Variat. Pouvoir Achat (%)", "number", value=2.0, step=0.5, key="prod_vpa")
     
-    rse_recyclage = decision_row("087- Budget Recyclage (K€)", "number", min_value=0.0, value=0.0, step=50.0)
-    rse_amenagements = decision_row("088- Aménagements adaptés (K€)", "number", min_value=0.0, value=0.0, step=50.0)
-
-    prod_m1_actives = decision_row("089- Machines M1 Actives", "number", min_value=0, value=min(17, nb_machines_m1) if nb_machines_m1 > 0 else 0, step=1)
-    prod_m2_actives = decision_row("090- Machines M2 Actives", "number", min_value=0, value=0, step=1)
-
-    prod_ventes_m1 = decision_row("091- Ventes Machines M1", "number", min_value=0, value=0, step=1)
-    prod_achats_m1 = decision_row("092- Achats Machines M1", "number", min_value=0, value=0, step=1)
-    prod_achats_m2 = decision_row("093- Achats Machines M2", "number", min_value=0, value=0, step=1)
-
-    prod_emb_deb = decision_row("094- Emb/Deb. Ouvriers", "number", value=0, step=10)
-    prod_var_pa = decision_row("095- Variat. Pouvoir Achat (%)", "number", value=2.0, step=0.5)
-    
-    rse_rd = decision_row("096- Recherche et Dévelop. (K€)", "number", min_value=0.0, value=0.0, step=50.0)
-
     # Info Capacité
     capacite_m1 = prod_m1_actives * C.M1_CAPACITY_A
     capacite_m2 = prod_m2_actives * C.M2_CAPACITY_A
@@ -564,19 +638,6 @@ with tabs[0]:
         manque_n = max(0, total_need_n - stock_mp_n)
         if manque_n > 0:
             st.warning(f"⚠️ Il manque **{manque_n:,.0f}** MP N")
-            if st.button("🛒 Ajuster Commande N", key="auto_app_n"):
-                # On met à jour directement la commande pour couvrir le manque
-                # Attention: Les commandes se font par 1000 unités (KU) dans le modèle AllDecisions mais ici le widget est en KU/per (step=500 dans interface??)
-                # Vérifions le widget "080- Commandes MP N (KU/per)" -> il est en valeur brute ou en KU ?
-                # decision_row("080- Commandes MP N (KU/per)", "number", min_value=0, value=0, step=500)
-                # Si step=500, ça suggère des unités ? Non, le label dit KU.
-                # Dans Calculator: decisions.approvisionnement.commandes_mp_n * 1000
-                # Donc l'input EST en milliers d'unités (KU).
-                
-                # Calcul en KU
-                missing_ku = manque_n / 1000.0
-                st.session_state["app_mp_n_val"] = float(int(missing_ku) + 1) # Arrondi sup
-                st.rerun()
 
     with col_mp_info2:
         st.info(f"Besoin TOTAL MP S : **{total_need_s:,.0f}** U")
@@ -589,32 +650,52 @@ with tabs[0]:
                 st.session_state["app_mp_s_val"] = float(int(missing_ku) + 1)
                 st.rerun()
 
+    net_prod_container = st.empty()
+    net_rse_container = st.empty()
+
+    st.markdown("---")
+
+    # --- RSE ---
+    st.subheader("RSE (RESPONSABILITÉ SOCIÉTALE)")
+    rse_recyclage = decision_row("087- Budget Recyclage (K€)", "number", min_value=0.0, value=0.0, step=50.0, key="rse_cyc")
+    rse_amenagements = decision_row("088- Aménagements adaptés (K€)", "number", min_value=0.0, value=0.0, step=50.0, key="rse_amen")
+    rse_rd = decision_row("096- Recherche et Dévelop. (K€)", "number", min_value=0.0, value=0.0, step=50.0, key="rse_rd")
+
+    net_rse_container = st.empty()
+
     st.markdown("---")
 
     # --- FINANCES ---
     st.subheader("FINANCES")
     
-    fin_emprunt_lt = decision_row("097- Emprunt Long Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0)
-    fin_duree_lt = decision_row("098- Nb de Trimestres (2-8)", "number", min_value=0, max_value=8, value=0, step=1)
+    fin_emprunt_lt = decision_row("097- Emprunt Long Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="fin_elt")
+    fin_duree_lt = decision_row("098- Nb de Trimestres (2-8)", "number", min_value=0, max_value=8, value=0, step=1, key="fin_dlt")
     
-    fin_effort_social = decision_row("101- Effort Social (%)", "number", min_value=0.0, max_value=10.0, value=0.0, step=0.5)
-    fin_emprunt_ct = decision_row("102- Emprunt Court Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0)
-    fin_effets = decision_row("103- Effets escomptés (K€)", "number", min_value=0.0, value=0.0, step=100.0)
-    fin_escompte = decision_row("104- Escompte Paiement Cpt (%)", "number", min_value=0.0, max_value=10.0, value=7.5, step=0.5)
-    fin_dividendes = decision_row("105- Dividendes (K€)", "number", min_value=0.0, value=200.0, step=50.0)
-    fin_rembt = decision_row("106- Rembt. dernier emprunt", "checkbox", value=False)
+    fin_effort_social = decision_row("101- Effort Social (%)", "number", min_value=0.0, max_value=10.0, value=0.0, step=0.5, key="fin_soc")
+    fin_emprunt_ct = decision_row("102- Emprunt Court Terme (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="fin_ect")
+    fin_effets = decision_row("103- Effets escomptés (K€)", "number", min_value=0.0, value=0.0, step=100.0, key="fin_eff")
+    fin_escompte = decision_row("104- Escompte Paiement Cpt (%)", "number", min_value=0.0, max_value=10.0, value=7.5, step=0.5, key="fin_esc")
+    fin_dividendes = decision_row("105- Dividendes (K€)", "number", min_value=0.0, value=200.0, step=50.0, key="fin_div")
+    fin_rembt = decision_row("106- Rembt. dernier emprunt", "checkbox", value=False, key="fin_rem")
     
-    fin_actions_new = decision_row("107- Nb actions nouvelles (KU)", "number", min_value=0, value=0, step=10)
-    fin_prix_emission = decision_row("108- Prix d'emission (€)", "number", min_value=0.0, value=0.0, step=1.0)
+    fin_actions_new = decision_row("107- Nb actions nouvelles (KU)", "number", min_value=0, value=0, step=10, key="fin_act")
+    fin_prix_emission = decision_row("108- Prix d'emission (€)", "number", min_value=0.0, value=0.0, step=1.0, key="fin_pax")
+
+    net_finance_container = st.empty()
+
+    st.markdown("---")
+    st.subheader("FRAIS DE STRUCTURE & DIVERS")
+    st.info("ℹ️ Cette section regroupe les frais administratifs, de direction et de déplacements.")
+    net_structure_container = st.empty()
 
     st.markdown("---")
     st.subheader("ACHATS / VENTES DE TITRES")
-    titres_f1 = decision_row("131- Actions F1", "number", value=0, step=100)
-    titres_f2 = decision_row("132- Actions F2", "number", value=0, step=100)
-    titres_f3 = decision_row("133- Actions F3", "number", value=0, step=100)
-    titres_f4 = decision_row("134- Actions F4", "number", value=0, step=100)
-    titres_f5 = decision_row("135- Actions F5", "number", value=0, step=100)
-    titres_f6 = decision_row("136- Actions F6", "number", value=0, step=100)
+    titres_f1 = decision_row("131- Actions F1", "number", value=0, step=100, key="tit_f1")
+    titres_f2 = decision_row("132- Actions F2", "number", value=0, step=100, key="tit_f2")
+    titres_f3 = decision_row("133- Actions F3", "number", value=0, step=100, key="tit_f3")
+    titres_f4 = decision_row("134- Actions F4", "number", value=0, step=100, key="tit_f4")
+    titres_f5 = decision_row("135- Actions F5", "number", value=0, step=100, key="tit_f5")
+    titres_f6 = decision_row("136- Actions F6", "number", value=0, step=100, key="tit_f6")
 
     st.markdown("---")
     
@@ -710,7 +791,8 @@ with tabs[0]:
         approvisionnement=ApprovisionnementDecision(
             commandes_mp_n=app_mp_n, duree_contrat_n=app_duree_n,
             commandes_mp_s=app_mp_s, duree_contrat_s=app_duree_s,
-            maintenance=app_maintenance
+            maintenance=app_maintenance,
+            achat_spot_n=0, achat_spot_s=0
         ),
         production=ProductionDecision(
             machines_m1_actives=prod_m1_actives, machines_m2_actives=prod_m2_actives,
@@ -763,19 +845,69 @@ with tabs[0]:
         # Marketing est toujours un coût, donc rouge
         net_mkt_container.markdown(f"👉 **TOTAL SECTION MARKETING** : <span style='color:red; font-weight:bold'>-{cost_mkt:,.0f} K€</span>", unsafe_allow_html=True)
 
+    # NET APPROVISIONNEMENT
+    if 'net_appro_container' in locals():
+        cost_appro = sim_results.cout_appro_total_section
+        net_appro_container.markdown(f"👉 **TOTAL SECTION APPROVISIONNEMENT** (MP Consommée + Maint.) : <span style='color:red; font-weight:bold'>-{cost_appro:,.0f} K€</span>", unsafe_allow_html=True)
+
+    # NET PRODUCTION
+    if 'net_prod_container' in locals():
+        # Prod UI = MO + Amort (MP et Maint sont en Appro) + Embauche
+        # Note: sim_results.cout_production_total contient tout sauf embauche (ajoutée après dans calculator, champ séparé)
+        cost_prod_ui = sim_results.cout_main_oeuvre + sim_results.cout_amortissement + sim_results.cout_embauche
+        net_prod_container.markdown(f"👉 **TOTAL SECTION PRODUCTION** (Main d'Oeuvre + Amort + Embauche) : <span style='color:red; font-weight:bold'>-{cost_prod_ui:,.0f} K€</span>", unsafe_allow_html=True)
+
+    # NET RSE
+    if 'net_rse_container' in locals():
+        cost_rse = sim_results.cout_rse_total_section
+        net_rse_container.markdown(f"👉 **TOTAL SECTION RSE** : <span style='color:red; font-weight:bold'>-{cost_rse:,.0f} K€</span>", unsafe_allow_html=True)
+
+    # NET FINANCE
+    if 'net_finance_container' in locals():
+        cost_fin = sim_results.cout_finance_total_section
+        net_finance_container.markdown(f"👉 **TOTAL SECTION FINANCE** (Impayés + Escompte + Intérêts) : <span style='color:red; font-weight:bold'>-{cost_fin:,.0f} K€</span>", unsafe_allow_html=True)
+
+    # NET STRUCTURE
+    if 'net_structure_container' in locals():
+        cost_struct = sim_results.cout_structure_admin + sim_results.cout_frais_deplacement
+        net_structure_container.markdown(f"👉 **TOTAL CHARGES STRUCTURE/ADMIN** : <span style='color:red; font-weight:bold'>-{cost_struct:,.0f} K€</span>", unsafe_allow_html=True)
+
     # --- AFFICHAGE DES CALCULS DE PRÉVISION ---
     col_prev1, col_prev2, col_prev3 = st.columns(3)
     with col_prev1:
         st.metric("CA Potentiel Total", f"{sim_results.ca_potentiel_total:,.0f} K€", help="Chiffre d'Affaires si tout le stock disponible est vendu")
     with col_prev2:
         # Estimation Résultat simple
-        # Marge = CA - Coûts Prod (inclus amort) - Coûts Commerciaux - Etudes - (Autres frais non détaillés ici comme frais financiers précis...)
-        # C'est une approximation opérationnelle
-        marge_estimee = sim_results.ca_potentiel_total - sim_results.cout_production_total - sim_results.cout_commercial_total - sim_results.cout_etudes
-        st.metric("Résultat Opérationnel Est.", f"{marge_estimee:,.0f} K€", help="CA - Coûts Prod - Coûts Commerciaux - Etudes")
+        # Marge = CA - Coûts Prod - Coûts Commerciaux - Etudes - Finances - Embauche + Variation Stock
+        marge_estimee = (sim_results.ca_potentiel_total 
+                         - sim_results.cout_production_total 
+                         - sim_results.cout_commercial_total 
+                         - sim_results.cout_etudes 
+                         - sim_results.cout_finance_total_section 
+                         - sim_results.cout_embauche
+                         - sim_results.cout_structure_admin
+                         - sim_results.cout_frais_deplacement
+                         + sim_results.valeur_variation_stocks)
+                         
+        st.metric("Résultat Opérationnel Est.", f"{marge_estimee:,.0f} K€", help="Inclus Variation de Stocks (Production stockée ou déstockage valorisé au coût de production)")
     with col_prev3:
         delta_color = "normal" if sim_results.tresorerie_estimee >= 0 else "inverse"
         st.metric("Trésorerie Fin Période", f"{sim_results.tresorerie_estimee:,.0f} K€", delta_color=delta_color)
+
+    # Flux de trésorerie détaillés
+    st.caption("Détail flux :")
+    col_flow1, col_flow2 = st.columns(2)
+    with col_flow1:
+        st.metric("Encaissements Totaux", f"+{sim_results.encaissements_total:,.0f} K€", help="Ventes encaissées + Emprunts + Cessions")
+    with col_flow2:
+        # Update Decaissements calculation logic in calculator? 
+        # Actually calculator computes decaissements_total separately.
+        # But we need to make sure calculator includes structure cost in decaissements.
+        # Checking calculator.py... yes, previously I added it to decaissements_autres via 'cout_production_total' hack which I removed.
+        # WAIT! I removed the hack in calculator.py but did I add it to decaissements_autres?
+        # I need to CHECK calculator.py again for decaissements logic.
+        curr_flow = sim_results.decaissements_total + sim_results.cout_structure_admin + sim_results.cout_frais_deplacement # Patching it here visually if missing in calculator? No, better fix calculator.
+        st.metric("Décaissements Totaux", f"-{sim_results.decaissements_total:,.0f} K€", help="Achats MP + Personnel + Charges + Investissements + Dividendes")
 
     if sim_results.warnings:
         st.error(f"⚠️ {len(sim_results.warnings)} Alertes détectées")

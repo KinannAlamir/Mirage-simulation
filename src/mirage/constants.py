@@ -6,9 +6,9 @@ UNITS_MP_PER_UNIT_B = 7  # Unités de MP N ou S par unité de produit B
 UNITS_MP_PER_UNIT_C = 10  # Unités de MP N ou S par unité de produit C
 
 # Machine capacities (per machine per period)
-M1_CAPACITY_A = 45_700  # Capacité M1 pour produit A
-M1_CAPACITY_B = 45_700  # Capacité M1 pour produit B (similaire à A)
-M1_CAPACITY_C = 22_850  # Capacité M1 pour produit C (environ moitié)
+M1_CAPACITY_A = 65_000  # Capacité M1 pour produit A
+M1_CAPACITY_B = 65_000  # Capacité M1 pour produit B (similaire à A)
+M1_CAPACITY_C = 32_500  # Capacité M1 pour produit C (environ moitié)
 
 M2_CAPACITY_A = 68_550  # Capacité M2 pour produit A
 M2_CAPACITY_B = 68_550  # Capacité M2 pour produit B
@@ -21,8 +21,8 @@ M1_RESALE_PRICE_RATIO = 0.7  # 70% of purchase price
 M2_RESALE_PRICE_RATIO = 0.7
 
 # Depreciation
-M1_DEPRECIATION_YEARS = 10  # Amortissement sur 10 ans
-M2_DEPRECIATION_YEARS = 10
+M1_DEPRECIATION_YEARS = 5   # Amortissement sur 5 ans (5% par trimestre)
+M2_DEPRECIATION_YEARS = 5
 
 # Workers
 WORKERS_PER_M1 = 20  # Ouvriers nécessaires par M1 active
@@ -95,3 +95,52 @@ RM_S_PRICES = {
 
 # Recycled Packaging
 RECYCLED_PACKAGING_ROYALTY_RATE = 0.02  # 2% du prix de vente net
+
+# Miscellaneous
+HIRING_COST_PER_WORKER = 400.0  # 400 euros par embauche ouvrier (P-3) -> sera indexé
+HIRING_COST_PER_SALESPERSON = 1000.0  # 1000 euros par embauche vendeur (P-3) -> sera indexé
+
+# Fixed Costs (Structural salaries)
+FIXED_SALARY_MANAGEMENT_SALES = 35_000  # Estimation trimestrielle (Dir Co + 2 Chefs Région + Secrétariat)
+FIXED_SALARY_MANAGEMENT_PROD = 25_000  # Estimation trimestrielle (Contremaitres + Cadres Prod)
+FIXED_SALARY_ADMIN = 60_000            # Estimation trimestrielle (Direction + Admin)
+
+# Mission & Travel Expenses (Estimations)
+MISSION_COST_PER_SALESPERSON = 1500.0  # Frais mission/déplacement trimestriel par vendeur
+MISSION_COST_GLOBAL_OTHERS = 5000.0    # Frais déplacements globaux ouvriers/admin
+
+# Training Cost
+TRAINING_COST_NEW_SALESPERSON = 200.0 # Indemnité stage par nouveau vendeur (Estimation)
+
+# Vacation Provision Rate
+VACATION_PROVISION_RATE = 0.0825  # 8.25% de la charge salariale totale
+
+# --- NOUVEAUX PARAMÈTRES P&L (COMPLÉMENTS) ---
+
+# Production
+SPOT_PURCHASE_SURCHARGE = 0.00  # Deprecated
+# Valeurs unitaires P-3 (à indexer sur IGP)
+ENERGY_COST_PER_UNIT = 1.00     # €/U (P-3) -> var IGP
+SUBCONTRACTING_PACKAGING_COST = 0.60 # €/U (P-3) -> var IGP
+VARIABLE_MFG_COST_PER_UNIT = 0.20    # €/U (P-3) -> var IGP
+
+# Commercial
+# Valeurs unitaires P-3 (à indexer sur IGP)
+TRANSPORT_COST_CT_PER_UNIT = 0.24 # €/U (P-3)
+TRANSPORT_COST_GS_PER_UNIT = 0.10 # €/U (P-3)
+
+# Admin & Généraux (Valeurs P-3, à indexer sur IGP)
+GENERAL_SERVICES_ENERGY_COST = 75_600.0 # €/Trim (P-3)
+FEES_AND_HONORARIUMS = 85_200.0         # €/Trim (P-3) Honoraires et frais divers
+OTHER_TAXES_INFLATION_BASE = 55_000.0   # €/Trim (P-3) Impôts et taxes divers
+MISC_MANAGEMENT_FEES = 96_600.0         # €/Trim (P-3) Frais divers de gestion (télécoms, papeterie)
+
+ADMIN_BUILDING_VALUE = 84_000.0      # Valeur brute P-3 (Exemple)
+ADMIN_AMORTIZATION_RATE = 0.0125      # 1.25% par trimestre
+
+# Financier & Exceptionnel
+OVERDRAFT_INTEREST_MULTIPLIER = 2.0  # 2x le taux court terme
+BANK_DISCOUNT_RATE_MULTIPLIER = 0.90 # 0.90 x le taux court terme
+SHARE_ISSUANCE_COST_RATE = 0.06      # 6% du montant levé
+CORPORATE_TAX_RATE = 0.34            # 34% (sauf P0)
+BANK_DISCOUNT_AGIOS_RATE = 0.015     # Deprecated if using multiplier logic, but kept for safety if needed
